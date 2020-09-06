@@ -1,4 +1,5 @@
-from spike import PrimeHub, LightMatrix, Button, StatusLight, ForceSensor, MotionSensor, Speaker, ColorSensor, App, DistanceSensor, Motor, MotorPair
+from spike import PrimeHub, LightMatrix, Button, StatusLight, ForceSensor, MotionSensor, Speaker, ColorSensor, App, \
+    DistanceSensor, Motor, MotorPair
 from spike.control import wait_for_seconds, wait_until, Timer
 import utime
 import ubluetooth
@@ -131,7 +132,8 @@ class PowerUPHandler:
         # called after a ble scan is finished
         elif event == self.__IRQ_SCAN_COMPLETE:
             if self.__addr:
-                self.__scan_callback(self.__addr_type, self.__addr, self.__man_data)
+                if self.__scan_callback:
+                    self.__scan_callback(self.__addr_type, self.__addr, self.__man_data)
                 self.__scan_callback = None
             else:
                 self.__scan_callback(None, None, None)
@@ -230,35 +232,47 @@ class PowerUPRemote:
         self.__COLOR_LIGHT_GREEN = 0x05
         self.__COLOR_GREEN = 0x06
 
-        self.__BUTTON_A_PLUS = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x01])
-        self.__BUTTON_A_RED = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x7F])
-        self.__BUTTON_A_MINUS = self.__create_message([0x05, 0x00, 0x45, 0x00, 0xFF])
-        self.__BUTTON_A_RELEASED = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x00])
+        self.BUTTON_A_PLUS = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x01])
+        self.BUTTON_A_RED = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x7F])
+        self.BUTTON_A_MINUS = self.__create_message([0x05, 0x00, 0x45, 0x00, 0xFF])
+        self.BUTTON_A_RELEASED = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x00])
 
-        self.__BUTTON_B_PLUS = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x01])
-        self.__BUTTON_B_RED = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x7F])
-        self.__BUTTON_B_MINUS = self.__create_message([0x05, 0x00, 0x45, 0x01, 0xFF])
-        self.__BUTTON_B_RELEASED = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x00])
+        self.BUTTON_B_PLUS = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x01])
+        self.BUTTON_B_RED = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x7F])
+        self.BUTTON_B_MINUS = self.__create_message([0x05, 0x00, 0x45, 0x01, 0xFF])
+        self.BUTTON_B_RELEASED = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x00])
 
-        self.__BUTTON_MIDDLE_GREEN = self.__create_message([0x05, 0x00, 0x08, 0x02, 0x01])
-        self.__BUTTON_MIDDLE_RELEASED = self.__create_message([0x05, 0x00, 0x08, 0x02, 0x00])
+        self.BUTTON_MIDDLE_GREEN = self.__create_message([0x05, 0x00, 0x08, 0x02, 0x01])
+        self.BUTTON_MIDDLE_RELEASED = self.__create_message([0x05, 0x00, 0x08, 0x02, 0x00])
 
         # class specific
         self.__handler = PowerUPHandler()
-        self.__hub = PrimeHub()
+        self.__a_button = self.BUTTON_A_RELEASED
+        self.__b_button = self.BUTTON_B_RELEASED
+        self.__middle_button = self.BUTTON_MIDDLE_RELEASED
+
+        # callbacks
         self.__button_callback = None
+        self.__connect_callback = None
+        self.__disconnect_callback = None
 
     def connect(self, timeout=3000):
-        self.__handler.on_connect(callback=self.__connect_callback)
-        self.__handler.on_disconnect(callback=self.__disconnected_callback)
-        self.__handler.on_notify(callback=self.__notification_callback)
-        self.__handler.scan_start(timeout, callback=self.__scan_callback)
+        self.__handler.on_connect(callback=self.__on_connect)
+        self.__handler.on_disconnect(callback=self.__on_disconnect)
+        self.__handler.on_notify(callback=self.__on_notify)
+        self.__handler.scan_start(timeout, callback=self.__on_scan)
 
     def disconnect(self):
         self.__handler.disconnect()
 
     def on_button(self, callback):
-        print("button")
+        self.__button_callback = callback
+
+    def on_connect(self, callback):
+        self.__connect_callback = callback
+
+    def on_disconnect(self, callback):
+        self.__disconnect_callback = callback
 
     # +-------------------+
     # | Private Functions |
@@ -273,14 +287,11 @@ class PowerUPRemote:
         self.__handler.write(color)
 
     # callback for scan result
-    def __scan_callback(self, addr_type, addr, man_data):
-        print("Scan Finished!")
-        print("Address Type:", addr_type, "Address:", addr, "Manufacture Data:", man_data)
+    def __on_scan(self, addr_type, addr, man_data):
         if addr and man_data[2][1] == self.__POWERED_UP_REMOTE_ID:
             self.__handler.connect(addr_type, addr)
 
-    def __connect_callback(self):
-        print("connected")
+    def __on_connect(self):
         # enables remote left port notification
         left_port = self.__create_message([0x0A, 0x00, 0x41, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01])
         # enables remote right port notification
@@ -295,29 +306,74 @@ class PowerUPRemote:
         self.__handler.write(right_port)
         utime.sleep(0.5)
         self.__handler.write(notifier, 0x0C)
+        if self.__connect_callback:
+            self.__connect_callback()
 
-    def __disconnected_callback(self):
-        print("disconnected")
+    def __on_disconnect(self):
+        if self.__disconnect_callback:
+            self.__disconnect_callback()
 
-    def __notification_callback(self, data):
-        if data == self.__BUTTON_A_PLUS:
-            self.__hub.light_matrix.set_pixel(0, 0, brightness=100)
-        elif data == self.__BUTTON_A_RED:
-            self.__hub.light_matrix.set_pixel(0, 1, brightness=100)
-        elif data == self.__BUTTON_A_MINUS:
-            self.__hub.light_matrix.set_pixel(0, 2, brightness=100)
-        elif data == self.__BUTTON_B_PLUS:
-            self.__hub.light_matrix.set_pixel(0, 3, brightness=100)
-        elif data == self.__BUTTON_B_RED:
-            self.__hub.light_matrix.set_pixel(0, 4, brightness=100)
-        elif data == self.__BUTTON_B_MINUS:
-            self.__hub.light_matrix.set_pixel(1, 0, brightness=100)
-        elif data == self.__BUTTON_MIDDLE_GREEN:
-            self.__hub.light_matrix.set_pixel(2, 0, brightness=100)
-        else:
-            self.__hub.light_matrix.off()
+    def __on_notify(self, data):
+        if data == self.BUTTON_A_PLUS:
+            self.__a_button = self.BUTTON_A_PLUS
+        if data == self.BUTTON_A_RED:
+            self.__a_button = self.BUTTON_A_RED
+        if data == self.BUTTON_A_MINUS:
+            self.__a_button = self.BUTTON_A_MINUS
+        if data == self.BUTTON_A_RELEASED:
+            self.__a_button = self.BUTTON_A_RELEASED
+        if data == self.BUTTON_B_PLUS:
+            self.__b_button = self.BUTTON_B_PLUS
+        if data == self.BUTTON_B_RED:
+            self.__b_button = self.BUTTON_B_RED
+        if data == self.BUTTON_B_MINUS:
+            self.__b_button = self.BUTTON_B_MINUS
+        if data == self.BUTTON_B_RELEASED:
+            self.__b_button = self.BUTTON_B_RELEASED
+        if data == self.BUTTON_MIDDLE_GREEN:
+            self.__middle_button = self.BUTTON_MIDDLE_GREEN
+        if data == self.BUTTON_MIDDLE_RELEASED:
+            self.__middle_button = self.BUTTON_MIDDLE_RELEASED
+
+        # callback the button data
+        if self.__button_callback:
+            self.__button_callback(self.__a_button, self.__b_button, self.__middle_button)
 
 
+def on_connect():
+    hub.status_light.on("green")
+
+
+def on_disconnect():
+    hub.status_light.on("white")
+
+
+def on_button(a_button, b_button, middle_button):
+    hub.light_matrix.off()
+    # a buttons from the remote
+    if a_button == remote.BUTTON_A_PLUS and b_button == remote.BUTTON_B_RELEASED:
+        hub.light_matrix.set_pixel(1, 0, brightness=100)
+    if a_button == remote.BUTTON_A_RED and b_button == remote.BUTTON_B_RELEASED:
+        hub.light_matrix.set_pixel(2, 0, brightness=100)
+    if a_button == remote.BUTTON_A_MINUS and b_button == remote.BUTTON_B_RELEASED:
+        hub.light_matrix.set_pixel(3, 0, brightness=100)
+    # b buttons from the remote
+    if b_button == remote.BUTTON_B_PLUS and a_button == remote.BUTTON_A_RELEASED:
+        hub.light_matrix.set_pixel(0, 1, brightness=100)
+    if b_button == remote.BUTTON_B_RED and a_button == remote.BUTTON_A_RELEASED:
+        hub.light_matrix.set_pixel(0, 2, brightness=100)
+    if b_button == remote.BUTTON_B_MINUS and a_button == remote.BUTTON_A_RELEASED:
+        hub.light_matrix.set_pixel(0, 3, brightness=100)
+    # combined buttons from the remote
+    if a_button == remote.BUTTON_A_PLUS and b_button == remote.BUTTON_B_PLUS:
+        hub.light_matrix.set_pixel(0, 0, brightness=100)
+    if a_button == remote.BUTTON_A_MINUS and b_button == remote.BUTTON_B_MINUS:
+        hub.light_matrix.set_pixel(4, 4, brightness=100)
+
+
+hub = PrimeHub()
 remote = PowerUPRemote()
+remote.on_connect(callback=on_connect)
+remote.on_disconnect(callback=on_disconnect)
+remote.on_button(callback=on_button)
 remote.connect()
-
