@@ -1,5 +1,4 @@
-from spike import PrimeHub, LightMatrix, Button, StatusLight, ForceSensor, MotionSensor, Speaker, ColorSensor, App, \
-    DistanceSensor, Motor, MotorPair
+from spike import PrimeHub, LightMatrix, Button, StatusLight, ForceSensor, MotionSensor, Speaker, ColorSensor, App, DistanceSensor, Motor, MotorPair
 from spike.control import wait_for_seconds, wait_until, Timer
 import utime
 import ubluetooth
@@ -15,6 +14,36 @@ from micropython import const
 # 3. Message Type
 # 4. Port ID
 # 5. - n. Specific Type Codes
+
+# +---------------------------------------------------+
+# |                Button Mapping Table               |
+# +-----------+---------------------------------------+
+# | Button ID | Button Name                           |
+# +-----------+---------------------------------------+
+# |    0      | Released (no button is pressed)       |
+# +-----------+---------------------------------------+
+# |    1      | 'Button A Plus'                       |
+# +-----------+---------------------------------------+
+# |    2      | 'Button A Red'                        |
+# +-----------+---------------------------------------+
+# |    3      | 'Button A Minus'                      |
+# +-----------+---------------------------------------+
+# |    4      | 'Button B Plus'                       |
+# +-----------+---------------------------------------+
+# |    5      | 'Button B Red'                        |
+# +-----------+---------------------------------------+
+# |    6      | 'Button B Minus'                      |
+# +-----------+---------------------------------------+
+# |    7      | 'Button A Plus' and 'Button B Plus'   |
+# +-----------+---------------------------------------+
+# |    8      | 'Button A Minus' and 'Button B Minus' |
+# +-----------+---------------------------------------+
+# |    9      | 'Button A Plus' and 'Button B Minus'  |
+# +-----------+---------------------------------------+
+# |    10     | 'Button A Minus' and 'Button B Plus'  |
+# +-----------+---------------------------------------+
+# |    11     | 'Button Center'                       |
+# +-----------+---------------------------------------+
 
 class PowerUPHandler:
     """Class to deal with LEGO(R) PowerUp(TM) over BLE"""
@@ -186,7 +215,7 @@ class Decoder:
 
     def decode_manufacturer(self, payload):
         man_data = []
-        n = self.__decode_field(payload, const(0xff))
+        n = self.__decode_field(payload, const(0xFF))
         if not n:
             return []
         company_identifier = ubinascii.hexlify(struct.pack('<h', *struct.unpack('>h', n[0])))
@@ -245,6 +274,10 @@ class PowerUPRemote:
         self.BUTTON_CENTER_GREEN = self.__create_message([0x05, 0x00, 0x08, 0x02, 0x01])
         self.BUTTON_CENTER_RELEASED = self.__create_message([0x05, 0x00, 0x08, 0x02, 0x00])
 
+        self._BUTTON_A = 0
+        self._BUTTON_B = 1
+        self._BUTTON_CENTER = 2
+
         # class specific
         self.__handler = PowerUPHandler()
         self.__buttons = [self.BUTTON_A_RELEASED, self.BUTTON_B_RELEASED, self.BUTTON_CENTER_RELEASED]
@@ -297,7 +330,7 @@ class PowerUPRemote:
         # enables notifier
         notifier = self.__create_message([0x01, 0x00])
 
-        self.__set_remote_color(self.__COLOR_GREEN)
+        self.__set_remote_color(self.__COLOR_LIGHT_BLUE)
         utime.sleep(0.5)
         self.__handler.write(left_port)
         utime.sleep(0.5)
@@ -313,68 +346,77 @@ class PowerUPRemote:
 
     def __on_notify(self, data):
         if data == self.BUTTON_A_PLUS:
-            self.__buttons[0] = self.BUTTON_A_PLUS
+            self.__buttons[self._BUTTON_A] = self.BUTTON_A_PLUS
         if data == self.BUTTON_A_RED:
-            self.__buttons[0] = self.BUTTON_A_RED
+            self.__buttons[self._BUTTON_A] = self.BUTTON_A_RED
         if data == self.BUTTON_A_MINUS:
-            self.__buttons[0] = self.BUTTON_A_MINUS
+            self.__buttons[self._BUTTON_A] = self.BUTTON_A_MINUS
         if data == self.BUTTON_A_RELEASED:
-            self.__buttons[0] = self.BUTTON_A_RELEASED
+            self.__buttons[self._BUTTON_A] = self.BUTTON_A_RELEASED
         if data == self.BUTTON_B_PLUS:
-            self.__buttons[1] = self.BUTTON_B_PLUS
+            self.__buttons[self._BUTTON_B] = self.BUTTON_B_PLUS
         if data == self.BUTTON_B_RED:
-            self.__buttons[1] = self.BUTTON_B_RED
+            self.__buttons[self._BUTTON_B] = self.BUTTON_B_RED
         if data == self.BUTTON_B_MINUS:
-            self.__buttons[1] = self.BUTTON_B_MINUS
+            self.__buttons[self._BUTTON_B] = self.BUTTON_B_MINUS
         if data == self.BUTTON_B_RELEASED:
-            self.__buttons[1] = self.BUTTON_B_RELEASED
+            self.__buttons[self._BUTTON_B] = self.BUTTON_B_RELEASED
         if data == self.BUTTON_CENTER_GREEN:
-            self.__buttons[2] = self.BUTTON_CENTER_GREEN
+            self.__buttons[self._BUTTON_CENTER] = self.BUTTON_CENTER_GREEN
         if data == self.BUTTON_CENTER_RELEASED:
-            self.__buttons[2] = self.BUTTON_CENTER_RELEASED
+            self.__buttons[self._BUTTON_CENTER] = self.BUTTON_CENTER_RELEASED
+
+        self.__on_button(self.__buttons)
+
+    def __on_button(self, buttons):
+        if buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+            button = 0
+        elif buttons[self._BUTTON_A] == self.BUTTON_A_PLUS and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+            button = 1
+        elif buttons[self._BUTTON_A] == self.BUTTON_A_RED and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+            button = 2
+        elif buttons[self._BUTTON_A] == self.BUTTON_A_MINUS and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+            button = 3
+        elif buttons[self._BUTTON_B] == self.BUTTON_B_PLUS and buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+            button = 4
+        elif buttons[self._BUTTON_B] == self.BUTTON_B_RED and buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+            button = 5
+        elif buttons[self._BUTTON_B] == self.BUTTON_B_MINUS and buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+            button = 6
+        elif buttons[self._BUTTON_A] == self.BUTTON_A_PLUS and buttons[self._BUTTON_B] == self.BUTTON_B_PLUS and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+            button = 7
+        elif buttons[self._BUTTON_A] == self.BUTTON_A_MINUS and buttons[self._BUTTON_B] == self.BUTTON_B_MINUS and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+            button = 8
+        elif buttons[self._BUTTON_A] == self.BUTTON_A_PLUS and buttons[self._BUTTON_B] == self.BUTTON_B_MINUS and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+            button = 9
+        elif buttons[self._BUTTON_A] == self.BUTTON_A_MINUS and buttons[self._BUTTON_B] == self.BUTTON_B_PLUS and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+            button = 10
+        elif buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_GREEN and buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED:
+            button = 11
+        else:
+            button = 0
 
         # callback the button data
         if self.__button_callback:
-            self.__button_callback(self.__buttons)
+            self.__button_callback(button)
 
 
 def on_connect():
-    hub.status_light.on("green")
+    hub.status_light.on("azure")
 
 
 def on_disconnect():
     hub.status_light.on("white")
 
 
-def on_button(buttons):
-    # buttons: [BUTTON_A, BUTTON_B, BUTTON_MIDDLE]
-    hub.light_matrix.off()
-    # a buttons from the remote
-    if buttons[_BUTTON_A] == remote.BUTTON_A_PLUS and buttons[_BUTTON_B] == remote.BUTTON_B_RELEASED:
-        hub.light_matrix.set_pixel(1, 0, brightness=100)
-    if buttons[_BUTTON_A] == remote.BUTTON_A_RED and buttons[_BUTTON_B] == remote.BUTTON_B_RELEASED:
-        hub.light_matrix.set_pixel(2, 0, brightness=100)
-    if buttons[_BUTTON_A] == remote.BUTTON_A_MINUS and buttons[_BUTTON_B] == remote.BUTTON_B_RELEASED:
-        hub.light_matrix.set_pixel(3, 0, brightness=100)
-    # b buttons from the remote
-    if buttons[_BUTTON_B] == remote.BUTTON_B_PLUS and buttons[_BUTTON_A] == remote.BUTTON_A_RELEASED:
-        hub.light_matrix.set_pixel(0, 1, brightness=100)
-    if buttons[_BUTTON_B] == remote.BUTTON_B_RED and buttons[_BUTTON_A] == remote.BUTTON_A_RELEASED:
-        hub.light_matrix.set_pixel(0, 2, brightness=100)
-    if buttons[_BUTTON_B] == remote.BUTTON_B_MINUS and buttons[_BUTTON_A] == remote.BUTTON_A_RELEASED:
-        hub.light_matrix.set_pixel(0, 3, brightness=100)
-    # combined buttons from the remote
-    if buttons[_BUTTON_A] == remote.BUTTON_A_PLUS and buttons[_BUTTON_B] == remote.BUTTON_B_PLUS:
-        hub.light_matrix.set_pixel(0, 0, brightness=100)
-    if buttons[_BUTTON_A] == remote.BUTTON_A_MINUS and buttons[_BUTTON_B] == remote.BUTTON_B_MINUS:
-        hub.light_matrix.set_pixel(4, 4, brightness=100)
+def on_button(button_id):
+    print(button_id)
 
 
-_BUTTON_A = 0
-_BUTTON_B = 1
-_BUTTON_CENTER = 2
-
+# set up hub
 hub = PrimeHub()
+
+# create remote and connect
 remote = PowerUPRemote()
 remote.on_connect(callback=on_connect)
 remote.on_disconnect(callback=on_disconnect)
