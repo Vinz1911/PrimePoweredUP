@@ -1,442 +1,200 @@
-from spike import PrimeHub, LightMatrix, Button, StatusLight, ForceSensor, MotionSensor, Speaker, ColorSensor, App, DistanceSensor, Motor, MotorPair
-from spike.control import wait_for_seconds, wait_until, Timer
-import utime
-import ubluetooth
-import ubinascii
-import struct
-from micropython import const
-
-
-# LEGO(R) Wireless Protocol 3.0
-# [0x00, 0x00, 0x00][0x00, 0x00 ... n]
-# 1. Message Length
-# 2. HUB ID (Unused, use 0x00)
-# 3. Message Type
-# 4. Port ID
-# 5. - n. Specific Type Codes
-
-# +---------------------------------------------------+
-# |                Button Mapping Table               |
-# +-----------+---------------------------------------+
-# | Button ID | Button Name                           |
-# +-----------+---------------------------------------+
-# |    0      | Released (no button is pressed)       |
-# +-----------+---------------------------------------+
-# |    1      | 'Button A Plus'                       |
-# +-----------+---------------------------------------+
-# |    2      | 'Button A Red'                        |
-# +-----------+---------------------------------------+
-# |    3      | 'Button A Minus'                      |
-# +-----------+---------------------------------------+
-# |    4      | 'Button B Plus'                       |
-# +-----------+---------------------------------------+
-# |    5      | 'Button B Red'                        |
-# +-----------+---------------------------------------+
-# |    6      | 'Button B Minus'                      |
-# +-----------+---------------------------------------+
-# |    7      | 'Button A Plus' and 'Button B Plus'   |
-# +-----------+---------------------------------------+
-# |    8      | 'Button A Minus' and 'Button B Minus' |
-# +-----------+---------------------------------------+
-# |    9      | 'Button A Plus' and 'Button B Minus'  |
-# +-----------+---------------------------------------+
-# |    10     | 'Button A Minus' and 'Button B Plus'  |
-# +-----------+---------------------------------------+
-# |    11     | 'Button Center'                       |
-# +-----------+---------------------------------------+
-
-class PowerUPHandler:
-    """Class to deal with LEGO(R) PowerUp(TM) over BLE"""
-
-    def __init__(self):
-        # constants
-        self.__IRQ_SCAN_RESULT = const(1 << 4)
-        self.__IRQ_SCAN_COMPLETE = const(1 << 5)
-        self.__IRQ_PERIPHERAL_CONNECT = const(1 << 6)
-        self.__IRQ_PERIPHERAL_DISCONNECT = const(1 << 7)
-        self.__IRQ_GATTC_SERVICE_RESULT = const(1 << 8)
-        self.__IRQ_GATTC_CHARACTERISTIC_RESULT = const(1 << 9)
-        self.__IRQ_GATTC_READ_RESULT = const(1 << 11)
-        self.__IRQ_GATTC_NOTIFY = const(1 << 13)
-
-        self.__LEGO_SERVICE_UUID = ubluetooth.UUID("00001623-1212-EFDE-1623-785FEABCD123")
-        self.__LEGO_SERVICE_CHAR = ubluetooth.UUID("00001624-1212-EFDE-1623-785FEABCD123")
-
-        # class specific
-        self.__ble = ubluetooth.BLE()
-        self.__ble.active(True)
-        self.__ble.irq(handler=self.__irq)
-        self.__decoder = Decoder()
-        self.__reset()
-
-    def __reset(self):
-        # cached data
-        self.__addr = None
-        self.__addr_type = None
-        self.__adv_type = None
-        self.__services = None
-        self.__man_data = None
-        self.__name = None
-        self.__conn_handle = None
-        self.__value_handle = None
-
-        # reserved callbacks
-        self.__scan_callback = None
-        self.__read_callback = None
-        self.__notify_callback = None
-        self.__connected_callback = None
-        self.__disconnected_callback = None
-
-    # start scan for ble devices
-    def scan_start(self, timeout, callback):
-        self.__scan_callback = callback
-        self.__ble.gap_scan(timeout, 30000, 30000)
-
-    # stop current scan
-    def scan_stop(self):
-        self.__ble.gap_scan(None)
-
-    # write gatt client data
-    def write(self, data, adv_value=None):
-        if not self.__is_connected():
-            return
-        if adv_value:
-            self.__ble.gattc_write(self.__conn_handle, adv_value, data)
-        else:
-            self.__ble.gattc_write(self.__conn_handle, self.__value_handle, data)
-
-    # read gatt client
-    def read(self, callback):
-        if not self.__is_connected():
-            return
-        self.__read_callback = callback
-        self.__ble.gattc_read(self.__conn_handle, self.__value_handle)
-
-    # connect to ble device
-    def connect(self, addr_type, addr):
-        self.__ble.gap_connect(addr_type, addr)
-
-    # disconnect from ble device
-    def disconnect(self):
-        if not self.__is_connected():
-            return
-        self.__ble.gap_disconnect(self.__conn_handle)
-        self.__reset()
-
-    # get notification
-    def on_notify(self, callback):
-        self.__notify_callback = callback
-
-    # get callback on connect
-    def on_connect(self, callback):
-        self.__connected_callback = callback
-
-    # get callback on connect
-    def on_disconnect(self, callback):
-        self.__disconnected_callback = callback
-
-    # +-------------------+
-    # | Private Functions |
-    # +-------------------+
-
-    # connection status
-    def __is_connected(self):
-        return self.__conn_handle is not None
-
-    # ble event handler
-    def __irq(self, event, data):
-        # called for every result of a ble scan
-        if event == self.__IRQ_SCAN_RESULT:
-            addr_type, addr, adv_type, rssi, adv_data = data
-            print(self.__decoder.decode_services(adv_data), addr_type)
-            if self.__LEGO_SERVICE_UUID in self.__decoder.decode_services(adv_data):
-                self.__addr_type = addr_type
-                self.__addr = bytes(addr)
-                self.__adv_type = adv_type
-                self.__name = self.__decoder.decode_name(adv_data)
-                self.__services = self.__decoder.decode_services(adv_data)
-                self.__man_data = self.__decoder.decode_manufacturer(adv_data)
-                self.scan_stop()
-
-        # called after a ble scan is finished
-        elif event == self.__IRQ_SCAN_COMPLETE:
-            if self.__addr:
-                if self.__scan_callback:
-                    self.__scan_callback(self.__addr_type, self.__addr, self.__man_data)
-                self.__scan_callback = None
-            else:
-                self.__scan_callback(None, None, None)
-
-        # called if a peripheral device is connected
-        elif event == self.__IRQ_PERIPHERAL_CONNECT:
-            conn_handle, addr_type, addr = data
-            self.__conn_handle = conn_handle
-            self.__ble.gattc_discover_services(self.__conn_handle)
-
-        # called if a peripheral device is disconnected
-        elif event == self.__IRQ_PERIPHERAL_DISCONNECT:
-            conn_handle, _, _ = data
-            self.__disconnected_callback()
-            if conn_handle == self.__conn_handle:
-                self.__reset()
-
-        # called if a service is returned
-        elif event == self.__IRQ_GATTC_SERVICE_RESULT:
-            conn_handle, start_handle, end_handle, uuid = data
-            if conn_handle == self.__conn_handle and uuid == self.__LEGO_SERVICE_UUID:
-                self.__ble.gattc_discover_characteristics(self.__conn_handle, start_handle, end_handle)
-
-        # called if a characteristic is returned
-        elif event == self.__IRQ_GATTC_CHARACTERISTIC_RESULT:
-            conn_handle, def_handle, value_handle, properties, uuid = data
-            if conn_handle == self.__conn_handle and uuid == self.__LEGO_SERVICE_CHAR:
-                self.__value_handle = value_handle
-                # finished discovering, connecting finished
-                self.__connected_callback()
-
-        # called if data was successfully read
-        elif event == self.__IRQ_GATTC_READ_RESULT:
-            conn_handle, value_handle, char_data = data
-            if self.__read_callback:
-                self.__read_callback(char_data)
-
-        # called if a notification appears
-        elif event == self.__IRQ_GATTC_NOTIFY:
-            conn_handle, value_handle, notify_data = data
-            if self.__notify_callback:
-                self.__notify_callback(notify_data)
-
-
-class Decoder:
-    """Class to decode BLE adv_data"""
-
-    def __init__(self):
-        self.__COMPANY_IDENTIFIER_CODES = {"0397": "LEGO System A/S"}
-
-    def decode_manufacturer(self, payload):
-        man_data = []
-        n = self.__decode_field(payload, const(0xFF))
-        if not n:
-            return []
-        company_identifier = ubinascii.hexlify(struct.pack('<h', *struct.unpack('>h', n[0])))
-        company_name = self.__COMPANY_IDENTIFIER_CODES.get(company_identifier.decode(), "?")
-        company_data = n[0][2:]
-        man_data.append(company_identifier.decode())
-        man_data.append(company_name)
-        man_data.append(company_data)
-        return man_data
-
-    def decode_name(self, payload):
-        n = self.__decode_field(payload, const(0x09))
-        return str(n[0], "utf-8") if n else "parsing failed!"
-
-    def decode_services(self, payload):
-        services = []
-        for u in self.__decode_field(payload, const(0x3)):
-            services.append(ubluetooth.UUID(struct.unpack("<h", u)[0]))
-        for u in self.__decode_field(payload, const(0x5)):
-            services.append(ubluetooth.UUID(struct.unpack("<d", u)[0]))
-        for u in self.__decode_field(payload, const(0x7)):
-            services.append(ubluetooth.UUID(u))
-        return services
-
-    def __decode_field(self, payload, adv_type):
-        i = 0
-        result = []
-        while i + 1 < len(payload):
-            if payload[i + 1] == adv_type:
-                result.append(payload[i + 2: i + payload[i] + 1])
-            i += 1 + payload[i]
-        return result
-
-
-class PowerUPRemote:
-    """Class to handle Lego(R) PowerUP(TM) Remote"""
-
-    def __init__(self):
-        # constants
-        self.__POWERED_UP_REMOTE_ID = 66
-        self.__COLOR_BLUE = 0x03
-        self.__COLOR_LIGHT_BLUE = 0x04
-        self.__COLOR_LIGHT_GREEN = 0x05
-        self.__COLOR_GREEN = 0x06
-
-        self.BUTTON_A_PLUS = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x01])
-        self.BUTTON_A_RED = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x7F])
-        self.BUTTON_A_MINUS = self.__create_message([0x05, 0x00, 0x45, 0x00, 0xFF])
-        self.BUTTON_A_RELEASED = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x00])
-
-        self.BUTTON_B_PLUS = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x01])
-        self.BUTTON_B_RED = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x7F])
-        self.BUTTON_B_MINUS = self.__create_message([0x05, 0x00, 0x45, 0x01, 0xFF])
-        self.BUTTON_B_RELEASED = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x00])
-
-        self.BUTTON_CENTER_GREEN = self.__create_message([0x05, 0x00, 0x08, 0x02, 0x01])
-        self.BUTTON_CENTER_RELEASED = self.__create_message([0x05, 0x00, 0x08, 0x02, 0x00])
-
-        self._BUTTON_A = 0
-        self._BUTTON_B = 1
-        self._BUTTON_CENTER = 2
-
-        # class specific
-        self.__handler = PowerUPHandler()
-        self.__buttons = [self.BUTTON_A_RELEASED, self.BUTTON_B_RELEASED, self.BUTTON_CENTER_RELEASED]
-
-        # callbacks
-        self.__button_callback = None
-        self.__connect_callback = None
-        self.__disconnect_callback = None
-
-    def connect(self, timeout=3000):
-        self.__handler.on_connect(callback=self.__on_connect)
-        self.__handler.on_disconnect(callback=self.__on_disconnect)
-        self.__handler.on_notify(callback=self.__on_notify)
-        self.__handler.scan_start(timeout, callback=self.__on_scan)
-
-    def disconnect(self):
-        self.__handler.disconnect()
-
-    def on_button(self, callback):
-        self.__button_callback = callback
-
-    def on_connect(self, callback):
-        self.__connect_callback = callback
-
-    def on_disconnect(self, callback):
-        self.__disconnect_callback = callback
-
-    # +-------------------+
-    # | Private Functions |
-    # +-------------------+
-
-    def __create_message(self, byte_array):
-        message = struct.pack('%sb' % len(byte_array), *byte_array)
-        return message
-
-    def __set_remote_color(self, color_byte):
-        color = self.__create_message([0x08, 0x00, 0x81, 0x34, 0x11, 0x51, 0x00, color_byte])
-        self.__handler.write(color)
-
-    # callback for scan result
-    def __on_scan(self, addr_type, addr, man_data):
-        if addr and man_data[2][1] == self.__POWERED_UP_REMOTE_ID:
-            self.__handler.connect(addr_type, addr)
-
-    def __on_connect(self):
-        # enables remote left port notification
-        left_port = self.__create_message([0x0A, 0x00, 0x41, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01])
-        # enables remote right port notification
-        right_port = self.__create_message([0x0A, 0x00, 0x41, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01])
-        # enables notifier
-        notifier = self.__create_message([0x01, 0x00])
-
-        self.__set_remote_color(self.__COLOR_LIGHT_BLUE)
-        utime.sleep(0.5)
-        self.__handler.write(left_port)
-        utime.sleep(0.5)
-        self.__handler.write(right_port)
-        utime.sleep(0.5)
-        self.__handler.write(notifier, 0x0C)
-        if self.__connect_callback:
-            self.__connect_callback()
-
-    def __on_disconnect(self):
-        if self.__disconnect_callback:
-            self.__disconnect_callback()
-
-    def __on_notify(self, data):
-        if data == self.BUTTON_A_PLUS:
-            self.__buttons[self._BUTTON_A] = self.BUTTON_A_PLUS
-        if data == self.BUTTON_A_RED:
-            self.__buttons[self._BUTTON_A] = self.BUTTON_A_RED
-        if data == self.BUTTON_A_MINUS:
-            self.__buttons[self._BUTTON_A] = self.BUTTON_A_MINUS
-        if data == self.BUTTON_A_RELEASED:
-            self.__buttons[self._BUTTON_A] = self.BUTTON_A_RELEASED
-        if data == self.BUTTON_B_PLUS:
-            self.__buttons[self._BUTTON_B] = self.BUTTON_B_PLUS
-        if data == self.BUTTON_B_RED:
-            self.__buttons[self._BUTTON_B] = self.BUTTON_B_RED
-        if data == self.BUTTON_B_MINUS:
-            self.__buttons[self._BUTTON_B] = self.BUTTON_B_MINUS
-        if data == self.BUTTON_B_RELEASED:
-            self.__buttons[self._BUTTON_B] = self.BUTTON_B_RELEASED
-        if data == self.BUTTON_CENTER_GREEN:
-            self.__buttons[self._BUTTON_CENTER] = self.BUTTON_CENTER_GREEN
-        if data == self.BUTTON_CENTER_RELEASED:
-            self.__buttons[self._BUTTON_CENTER] = self.BUTTON_CENTER_RELEASED
-
-        self.__on_button(self.__buttons)
-
-    def __on_button(self, buttons):
-        if buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
-            button = 0
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_PLUS and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
-            button = 1
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_RED and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
-            button = 2
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_MINUS and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
-            button = 3
-        elif buttons[self._BUTTON_B] == self.BUTTON_B_PLUS and buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
-            button = 4
-        elif buttons[self._BUTTON_B] == self.BUTTON_B_RED and buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
-            button = 5
-        elif buttons[self._BUTTON_B] == self.BUTTON_B_MINUS and buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
-            button = 6
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_PLUS and buttons[self._BUTTON_B] == self.BUTTON_B_PLUS and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
-            button = 7
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_MINUS and buttons[self._BUTTON_B] == self.BUTTON_B_MINUS and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
-            button = 8
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_PLUS and buttons[self._BUTTON_B] == self.BUTTON_B_MINUS and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
-            button = 9
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_MINUS and buttons[self._BUTTON_B] == self.BUTTON_B_PLUS and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
-            button = 10
-        elif buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_GREEN and buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED:
-            button = 11
-        else:
-            button = 0
-
-        # callback the button data
-        if self.__button_callback:
-            self.__button_callback(button)
-
-
-def on_connect():
-    hub.status_light.on("azure")
-
-
-def on_disconnect():
-    hub.status_light.on("white")
-
-
-def on_button(button_id):
-    hub.light_matrix.off()
-    if button_id == 1:
-        hub.light_matrix.set_pixel(0, 0, brightness=100)
-    elif button_id == 2:
-        hub.light_matrix.set_pixel(1, 0, brightness=100)
-    elif button_id == 3:
-        hub.light_matrix.set_pixel(2, 0, brightness=100)
-    elif button_id == 4:
-        hub.light_matrix.set_pixel(3, 0, brightness=100)
-    elif button_id == 5:
-        hub.light_matrix.set_pixel(4, 0, brightness=100)
-    elif button_id == 6:
-        hub.light_matrix.set_pixel(0, 1, brightness=100)
-    elif button_id == 7:
-        hub.light_matrix.set_pixel(0, 2, brightness=100)
-    elif button_id == 0:
-        hub.light_matrix.off()
+import hub
+import time
+import binascii
+
+class HubType:
+  DUPLO_TRAIN_HUB_ID = 32
+  BOOST_MOVE_HUB_ID = 64
+  POWERED_UP_HUB_ID = 65
+  POWERED_UP_REMOTE_ID = 66
+  CONTROL_PLUS_LARGE_HUB_ID = 128
+
+_connected_idx = None
+def _connect_callback(idx):
+  global _connected_idx
+  print("Connected: %d" % idx)
+  _connected_idx = idx
+hub.ble.callback(_connect_callback)
+
+def _hexlify(bytes):
+  return binascii.hexlify(bytes, ' ').decode()
+
+class LWPButton:
+  def __init__(self):
+    self._callback = None
+    self._pressed = False
+    self._was_pressed = False
+    self._last_pressed_ms = 0
+  def on_change(self, cb):
+    self._callback = cb
+  def is_pressed(self):
+    return self._pressed
+  def was_pressed(self):
+    r = self._was_pressed
+    self._was_pressed = False
+    return r
+  def _change(self, value):
+    if self._pressed != value:
+      self._pressed = value
+      if value:
+        self._was_pressed = True
+        self._last_pressed_ms = time.ticks_ms()
+        if self._callback:
+          self._callback(0)
+      else:
+        if self._callback:
+          l = time.ticks_diff(time.ticks_ms(), self._last_pressed_ms)
+          self._callback(l if l > 0 else 1)
+
+class LWPObject:
+  pass
+
+class LWPDevice:
+  def __init__(self, conn, model_id, idx):
+    self.conn = conn
+    self.idx = idx
+    self.model_id = model_id
+    self.conn.callback(self.recv)
+    self.conn.subscribe()
+    self.button = LWPObject()
+    time.sleep(.1)
+    if model_id == HubType.DUPLO_TRAIN_HUB_ID:
+      self.ledPort = 0x11
+    elif model_id == HubType.POWERED_UP_REMOTE_ID:
+      self.button.A = LWPObject()
+      self.button.B = LWPObject()
+      self.button.A.plus = LWPButton()
+      self.button.A.red = LWPButton()
+      self.button.A.minus = LWPButton()
+      self.button.B.plus = LWPButton()
+      self.button.B.red = LWPButton()
+      self.button.B.minus = LWPButton()
+      self.ledPort = 0x34
+      self.portMode(0, 3)
+      self.portMode(1, 3)
     else:
-        hub.light_matrix.off()
+      self.ledPort = 0x32
+    self.button.green = LWPButton()
+    self.subscribeToHubProp(2)
 
+  def disconnect(self):
+    self.conn.disconnect(self.idx)
 
-# set up hub
-hub = PrimeHub()
+  def recv(self, data):
+    msg_type = data[2]
+    if msg_type == 0x82: # command feedback
+      print("cmd output feedback %d: port %02x status %02x" % (self.idx, data[3], data[4]))
+    elif msg_type == 0x05: # error
+      print("error %d: cmd %02x code %02x" % (self.idx, data[3], data[4]))
+    elif msg_type == 0x45: # port value (single)
+      port = data[3]
+      print("port value %d: port %02x" % (self.idx, port), _hexlify(data[4:]))
+      if self.model_id == HubType.POWERED_UP_REMOTE_ID and port < 2:
+        b = self.button.A if port == 0 else self.button.B
+        b.plus._change((data[4] >> 0) & 1)
+        b.red._change((data[4] >> 1) & 1)
+        b.minus._change((data[4] >> 2) & 1)
+    elif msg_type == 0x47: # port input format (single)
+      interval = int.from_bytes(data[5:8], 'little', False)
+      print("port mode %d: port %02x mode %02x notify %02x interval %d" % (self.idx, data[3], data[4], data[9], interval))
+    elif msg_type == 0x01: # hub property update
+      print("hub action %d: prop %02x value" % (self.idx, data[3]), _hexlify(data[5:]))
+      if data[3] == 2:
+        self.button.green._change(data[5])
+    elif msg_type == 0x02: # hub action
+      print("hub action %d: %02x" % (self.idx, data[3]))
+    elif msg_type == 0x04: # port event
+      port = data[3]
+      event = data[4]
+      if event == 0x00: # detach
+        print("port detached %d: %02x" % (self.idx, port))
+      elif event == 0x01: # attach
+        id = int.from_bytes(data[5:6], 'little', False)
+        print("port attached %d: port %02x type %04d" % (self.idx, port, id))
+      elif event == 0x02: # attach virtual
+        id = int.from_bytes(data[5:6], 'little', False)
+        print("port attached virtual %d: port %02x type %04x %02x + %02x" % (self.idx, port, id, data[7], data[8]))
+    else:
+      print("recv data %02x: " % data[2], self.idx, _hexlify(data[3:]))
 
-# create remote and connect
-remote = PowerUPRemote()
-remote.on_connect(callback=on_connect)
-remote.on_disconnect(callback=on_disconnect)
-remote.on_button(callback=on_button)
-remote.connect()
+  def send(self, data):
+    self.conn.send((len(data)+2).to_bytes(2, 'little') + data)
+    time.sleep(.2)
+
+  def writePort(self, port, mode, data):
+    self.send(bytes([0x81, port, 0x11, 0x51, mode]) + data)
+
+  def writePort1(self, port, mode, b):
+    self.writePort(port, mode, bytes([b & 255]))
+
+  def portMode(self, port, mode, notify = 1):
+    self.send(bytes([0x41, port, mode, 1, 0, 0, 0, notify]))
+
+  def setHubProp(self, prop, data):
+    self.send(bytes([0x01, prop, 0x01]) + data)
+
+  def getHubProp(self, prop):
+    self.send(bytes([0x01, prop, 0x05]))
+
+  def subscribeToHubProp(self, prop):
+    self.send(bytes([0x01, prop, 0x02]))
+
+  def off(self):
+    self.send(bytes([0x02, 0x01]))
+
+  def led(self, *args):
+    if len(args) == 1:
+      self.portMode(self.ledPort, 0, 0)
+      self.writePort1(self.ledPort, 0, args[0])
+    elif len(args) == 3:
+      self.portMode(self.ledPort, 1, 0)
+      self.writePort(self.ledPort, 1, bytes(args))
+
+def connect(timeout = 15):
+  global _connected_idx
+  hub.ble.scan(timeout)
+  for _ in range(timeout):
+    for i, a in enumerate(hub.ble.scan_result()):
+      if a['service_id'] == '00001623-1212-EFDE-1623-785FEABCD123':
+        hub_model_id = a['man_data'][1] if len(a['man_data']) > 1 else None
+        print("Connecting to hub model %d" % hub_model_id)
+        _connected_idx = None
+        conn = hub.ble.connect(i)
+        for _ in range(30):
+          if _connected_idx != None:
+            print('waited: %d' % _)
+            break
+          time.sleep(.1)
+        if conn and _connected_idx != None:
+          print("Connected")
+          time.sleep(1)
+          return LWPDevice(conn, hub_model_id, _connected_idx)
+        print('Connection timed out')
+        return None
+    time.sleep(1)
+  return None
+
+def connect(timeout=15):
+  global _connected_idx
+  hub.ble.scan(timeout)
+  for _ in range(timeout):
+    for i, a in enumerate(hub.ble.scan_result()):
+      if a['service_id'] == '00001623-1212-EFDE-1623-785FEABCD123':
+        hub_model_id = a['man_data'][1] if len(a['man_data']) > 1 else None
+        print("Connecting to hub model %d" % hub_model_id)
+        _connected_idx = None
+        conn = hub.ble.connect(i)
+        for _ in range(30):
+          if _connected_idx != None:
+            print('waited: %d' % _)
+            break
+          time.sleep(.1)
+        if conn and _connected_idx != None:
+          print("Connected")
+          time.sleep(1)
+          return LWPDevice(conn, hub_model_id, _connected_idx)
+        print('Connection timed out')
+        return None
+    time.sleep(1)
+  return None
+
