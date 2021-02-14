@@ -11,18 +11,18 @@ class PowerUPButtons:
     def __init__(self):
         pass
 
-    RELEASED = const(0)
-    A_PLUS = const(1)
-    A_RED = const(2)
-    A_MINUS = const(3)
-    B_PLUS = const(4)
-    B_RED = const(5)
-    B_MINUS = const(6)
-    A_PLUS_B_PLUS = const(7)
-    A_MINUS_B_MINUS = const(8)
-    A_PLUS_B_MINUS = const(9)
-    A_MINUS_B_PLUS = const(10)
-    CENTER = const(11)
+    RELEASED = const(0x00)
+    A_PLUS = const(0x01)
+    A_RED = const(0x02)
+    A_MINUS = const(0x03)
+    B_PLUS = const(0x04)
+    B_RED = const(0x05)
+    B_MINUS = const(0x06)
+    A_PLUS_B_PLUS = const(0x07)
+    A_MINUS_B_MINUS = const(0x08)
+    A_PLUS_B_MINUS = const(0x09)
+    A_MINUS_B_PLUS = const(0x0A)
+    CENTER = const(0x0B)
 
 
 class PowerUPColors:
