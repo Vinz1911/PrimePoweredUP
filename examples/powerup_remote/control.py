@@ -12,16 +12,16 @@ class PowerUPButtons:
         pass
 
     RELEASED = const(0x00)
-    A_PLUS = const(0x01)
-    A_RED = const(0x02)
-    A_MINUS = const(0x03)
-    B_PLUS = const(0x04)
-    B_RED = const(0x05)
-    B_MINUS = const(0x06)
-    A_PLUS_B_PLUS = const(0x07)
-    A_MINUS_B_MINUS = const(0x08)
-    A_PLUS_B_MINUS = const(0x09)
-    A_MINUS_B_PLUS = const(0x0A)
+    LEFT_PLUS = const(0x01)
+    LEFT_RED = const(0x02)
+    LEFT_MINUS = const(0x03)
+    RIGHT_PLUS = const(0x04)
+    RIGHT_RED = const(0x05)
+    RIGHT_MINUS = const(0x06)
+    LEFT_PLUS_RIGHT_PLUS = const(0x07)
+    LEFT_MINUS_RIGHT_MINUS = const(0x08)
+    LEFT_PLUS_RIGHT_MINUS = const(0x09)
+    LEFT_MINUS_RIGHT_PLUS = const(0x0A)
     CENTER = const(0x0B)
 
 
@@ -53,42 +53,47 @@ class PowerUPRemote:
         self.__POWERED_UP_REMOTE_ID = 66
         self.__color = PowerUPColors.GREEN
 
-        self.BUTTON_A_PLUS = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x01])
-        self.BUTTON_A_RED = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x7F])
-        self.BUTTON_A_MINUS = self.__create_message([0x05, 0x00, 0x45, 0x00, 0xFF])
-        self.BUTTON_A_RELEASED = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x00])
+        self.BUTTON_LEFT_PLUS = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x01])
+        self.BUTTON_LEFT_RED = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x7F])
+        self.BUTTON_LEFT_MINUS = self.__create_message([0x05, 0x00, 0x45, 0x00, 0xFF])
+        self.BUTTON_LEFT_RELEASED = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x00])
 
-        self.BUTTON_B_PLUS = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x01])
-        self.BUTTON_B_RED = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x7F])
-        self.BUTTON_B_MINUS = self.__create_message([0x05, 0x00, 0x45, 0x01, 0xFF])
-        self.BUTTON_B_RELEASED = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x00])
+        self.BUTTON_RIGHT_PLUS = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x01])
+        self.BUTTON_RIGHT_RED = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x7F])
+        self.BUTTON_RIGHT_MINUS = self.__create_message([0x05, 0x00, 0x45, 0x01, 0xFF])
+        self.BUTTON_RIGHT_RELEASED = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x00])
 
         self.BUTTON_CENTER_GREEN = self.__create_message([0x05, 0x00, 0x08, 0x02, 0x01])
         self.BUTTON_CENTER_RELEASED = self.__create_message([0x05, 0x00, 0x08, 0x02, 0x00])
 
-        self._BUTTON_A = 0
-        self._BUTTON_B = 1
-        self._BUTTON_CENTER = 2
+        self._LEFT_BUTTON = 0
+        self._RIGHT_BUTTON = 1
+        self._CENTER_BUTTON = 2
 
         # class specific
         self.__handler = _PowerUPHandler()
-        self.__buttons = [self.BUTTON_A_RELEASED, self.BUTTON_B_RELEASED, self.BUTTON_CENTER_RELEASED]
+        self.__buttons = [self.BUTTON_LEFT_RELEASED, self.BUTTON_RIGHT_RELEASED, self.BUTTON_CENTER_RELEASED]
 
         # callbacks
         self.__button_callback = None
         self.__connect_callback = None
         self.__disconnect_callback = None
 
-    def connect(self, timeout=3000, color=PowerUPColors.GREEN):
-        self.__color = color
+    def connect(self, timeout=3000, address=None):
         self.__handler.debug = self.debug
         self.__handler.on_connect(callback=self.__on_connect)
         self.__handler.on_disconnect(callback=self.__on_disconnect)
         self.__handler.on_notify(callback=self.__on_notify)
-        self.__handler.scan_start(timeout, callback=self.__on_scan)
+        if address:
+            self.__handler.connect(0, ubinascii.unhexlify(address.replace(':', '')))
+        else:
+            self.__handler.scan_start(timeout, callback=self.__on_scan)
 
     def disconnect(self):
         self.__handler.disconnect()
+
+    def set_color(self, color):
+        self.__set_remote_color(color)
 
     def on_button(self, callback):
         self.__button_callback = callback
@@ -123,11 +128,11 @@ class PowerUPRemote:
         notifier = self.__create_message([0x01, 0x00])
 
         self.__set_remote_color(self.__color)
-        utime.sleep(0.5)
+        utime.sleep(0.1)
         self.__handler.write(left_port)
-        utime.sleep(0.5)
+        utime.sleep(0.1)
         self.__handler.write(right_port)
-        utime.sleep(0.5)
+        utime.sleep(0.1)
         self.__handler.write(notifier, 0x0C)
         if self.__connect_callback:
             self.__connect_callback()
@@ -137,53 +142,53 @@ class PowerUPRemote:
             self.__disconnect_callback()
 
     def __on_notify(self, data):
-        if data == self.BUTTON_A_PLUS:
-            self.__buttons[self._BUTTON_A] = self.BUTTON_A_PLUS
-        if data == self.BUTTON_A_RED:
-            self.__buttons[self._BUTTON_A] = self.BUTTON_A_RED
-        if data == self.BUTTON_A_MINUS:
-            self.__buttons[self._BUTTON_A] = self.BUTTON_A_MINUS
-        if data == self.BUTTON_A_RELEASED:
-            self.__buttons[self._BUTTON_A] = self.BUTTON_A_RELEASED
-        if data == self.BUTTON_B_PLUS:
-            self.__buttons[self._BUTTON_B] = self.BUTTON_B_PLUS
-        if data == self.BUTTON_B_RED:
-            self.__buttons[self._BUTTON_B] = self.BUTTON_B_RED
-        if data == self.BUTTON_B_MINUS:
-            self.__buttons[self._BUTTON_B] = self.BUTTON_B_MINUS
-        if data == self.BUTTON_B_RELEASED:
-            self.__buttons[self._BUTTON_B] = self.BUTTON_B_RELEASED
+        if data == self.BUTTON_LEFT_PLUS:
+            self.__buttons[self._LEFT_BUTTON] = self.BUTTON_LEFT_PLUS
+        if data == self.BUTTON_LEFT_RED:
+            self.__buttons[self._LEFT_BUTTON] = self.BUTTON_LEFT_RED
+        if data == self.BUTTON_LEFT_MINUS:
+            self.__buttons[self._LEFT_BUTTON] = self.BUTTON_LEFT_MINUS
+        if data == self.BUTTON_LEFT_RELEASED:
+            self.__buttons[self._LEFT_BUTTON] = self.BUTTON_LEFT_RELEASED
+        if data == self.BUTTON_RIGHT_PLUS:
+            self.__buttons[self._RIGHT_BUTTON] = self.BUTTON_RIGHT_PLUS
+        if data == self.BUTTON_RIGHT_RED:
+            self.__buttons[self._RIGHT_BUTTON] = self.BUTTON_RIGHT_RED
+        if data == self.BUTTON_RIGHT_MINUS:
+            self.__buttons[self._RIGHT_BUTTON] = self.BUTTON_RIGHT_MINUS
+        if data == self.BUTTON_RIGHT_RELEASED:
+            self.__buttons[self._RIGHT_BUTTON] = self.BUTTON_RIGHT_RELEASED
         if data == self.BUTTON_CENTER_GREEN:
-            self.__buttons[self._BUTTON_CENTER] = self.BUTTON_CENTER_GREEN
+            self.__buttons[self._CENTER_BUTTON] = self.BUTTON_CENTER_GREEN
         if data == self.BUTTON_CENTER_RELEASED:
-            self.__buttons[self._BUTTON_CENTER] = self.BUTTON_CENTER_RELEASED
+            self.__buttons[self._CENTER_BUTTON] = self.BUTTON_CENTER_RELEASED
 
         self.__on_button(self.__buttons)
 
     def __on_button(self, buttons):
-        if buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+        if buttons[self._LEFT_BUTTON] == self.BUTTON_LEFT_RELEASED and buttons[self._RIGHT_BUTTON] == self.BUTTON_RIGHT_RELEASED and buttons[self._CENTER_BUTTON] == self.BUTTON_CENTER_RELEASED:
             button = 0
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_PLUS and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+        elif buttons[self._LEFT_BUTTON] == self.BUTTON_LEFT_PLUS and buttons[self._RIGHT_BUTTON] == self.BUTTON_RIGHT_RELEASED and buttons[self._CENTER_BUTTON] == self.BUTTON_CENTER_RELEASED:
             button = 1
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_RED and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+        elif buttons[self._LEFT_BUTTON] == self.BUTTON_LEFT_RED and buttons[self._RIGHT_BUTTON] == self.BUTTON_RIGHT_RELEASED and buttons[self._CENTER_BUTTON] == self.BUTTON_CENTER_RELEASED:
             button = 2
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_MINUS and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+        elif buttons[self._LEFT_BUTTON] == self.BUTTON_LEFT_MINUS and buttons[self._RIGHT_BUTTON] == self.BUTTON_RIGHT_RELEASED and buttons[self._CENTER_BUTTON] == self.BUTTON_CENTER_RELEASED:
             button = 3
-        elif buttons[self._BUTTON_B] == self.BUTTON_B_PLUS and buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+        elif buttons[self._RIGHT_BUTTON] == self.BUTTON_RIGHT_PLUS and buttons[self._LEFT_BUTTON] == self.BUTTON_LEFT_RELEASED and buttons[self._CENTER_BUTTON] == self.BUTTON_CENTER_RELEASED:
             button = 4
-        elif buttons[self._BUTTON_B] == self.BUTTON_B_RED and buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+        elif buttons[self._RIGHT_BUTTON] == self.BUTTON_RIGHT_RED and buttons[self._LEFT_BUTTON] == self.BUTTON_LEFT_RELEASED and buttons[self._CENTER_BUTTON] == self.BUTTON_CENTER_RELEASED:
             button = 5
-        elif buttons[self._BUTTON_B] == self.BUTTON_B_MINUS and buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+        elif buttons[self._RIGHT_BUTTON] == self.BUTTON_RIGHT_MINUS and buttons[self._LEFT_BUTTON] == self.BUTTON_LEFT_RELEASED and buttons[self._CENTER_BUTTON] == self.BUTTON_CENTER_RELEASED:
             button = 6
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_PLUS and buttons[self._BUTTON_B] == self.BUTTON_B_PLUS and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+        elif buttons[self._LEFT_BUTTON] == self.BUTTON_LEFT_PLUS and buttons[self._RIGHT_BUTTON] == self.BUTTON_RIGHT_PLUS and buttons[self._CENTER_BUTTON] == self.BUTTON_CENTER_RELEASED:
             button = 7
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_MINUS and buttons[self._BUTTON_B] == self.BUTTON_B_MINUS and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+        elif buttons[self._LEFT_BUTTON] == self.BUTTON_LEFT_MINUS and buttons[self._RIGHT_BUTTON] == self.BUTTON_RIGHT_MINUS and buttons[self._CENTER_BUTTON] == self.BUTTON_CENTER_RELEASED:
             button = 8
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_PLUS and buttons[self._BUTTON_B] == self.BUTTON_B_MINUS and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+        elif buttons[self._LEFT_BUTTON] == self.BUTTON_LEFT_PLUS and buttons[self._RIGHT_BUTTON] == self.BUTTON_RIGHT_MINUS and buttons[self._CENTER_BUTTON] == self.BUTTON_CENTER_RELEASED:
             button = 9
-        elif buttons[self._BUTTON_A] == self.BUTTON_A_MINUS and buttons[self._BUTTON_B] == self.BUTTON_B_PLUS and buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_RELEASED:
+        elif buttons[self._LEFT_BUTTON] == self.BUTTON_LEFT_MINUS and buttons[self._RIGHT_BUTTON] == self.BUTTON_RIGHT_PLUS and buttons[self._CENTER_BUTTON] == self.BUTTON_CENTER_RELEASED:
             button = 10
-        elif buttons[self._BUTTON_CENTER] == self.BUTTON_CENTER_GREEN and buttons[self._BUTTON_A] == self.BUTTON_A_RELEASED and buttons[self._BUTTON_B] == self.BUTTON_B_RELEASED:
+        elif buttons[self._CENTER_BUTTON] == self.BUTTON_CENTER_GREEN and buttons[self._LEFT_BUTTON] == self.BUTTON_LEFT_RELEASED and buttons[self._RIGHT_BUTTON] == self.BUTTON_RIGHT_RELEASED:
             button = 11
         else:
             button = 0
@@ -280,7 +285,6 @@ class _PowerUPHandler:
         if not self.__is_connected():
             return
         self.__ble.gap_disconnect(self.__conn_handle)
-        self.__reset()
 
     # get notification
     def on_notify(self, callback):
