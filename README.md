@@ -1,10 +1,19 @@
 # PrimePowerUP
 
-## Current Examples:
-- Spike Prime + Powerup Remote
-    - 1: basic remote example for testing ble connection
-    - 2: example about lighting up dot's on spike prime on button press on remote
-    - 3: example to control the `advanced driving base` model from LEGO(R) with the PowerUP(TM) Remote
-    
-    - **NOTE: If you're using the official LEGO Spike APP to upload the code, you should just upload it and don't run it with attached console, this can be ended up in a frozen Spike Prime**
-    - **NOTE: There is currently one problem: the ble code consumes lot of ressources from the spike prime, so it's necessary to restart the prime after a code execution because of mem alloc (bug)?**
+`PrimePoweredUP` contains a library for Lego Spike Prime to connect to PoweredUP Remote (Handset) over BLE.
+The core is based on the MicroPython ubluetooth low level api.
+
+### Description
+- the library use lot of memory. i recommend to pre compile the library from `remote/control` and install it on the prime hub.
+a very good way to do that is using this awesome tool: [Spike Tools](https://github.com/XenseEducation/spiketools-release/releases)
+pre compiled library can also be downloaded in releases section: [Pre-Compiled Library](https://github.com/Vinz1911/PrimePowerUP/releases)
+
+- there are two examples in `examples` folder. The first one shows how to light up dot's on Prime Hub and the second one 
+shows how to control a motor pair with the remote. examples are created by using the control.py installed as pre compiled lib
+(it's also possible to copy all together and load it on the hub)
+
+### Known Problems:
+- the ubluetooth class has some problems with event loop based functions from Lego. This means, if you run a event loop based
+function within the button pressed callback, the entire hub will freeze. This is currently not possible to fix that, maybe with 
+a new firmare which supports uasyncio library. **Event based functions ?!** are functions like playing sound until end, wait for or 
+motor functions like run_to_position or run_for_degrees and so on.
