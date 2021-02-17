@@ -16,7 +16,7 @@ def on_connect():
     """
     callback on connect
     """
-    hub.status_light.on("azure")
+    hub.status_light.on("blue")
 
 
 def on_disconnect():
@@ -33,17 +33,17 @@ def on_button(button):
 
     :param button: button id
     """
-    if button == PoweredUPButtons.B_PLUS:
+    if button == PoweredUPButtons.RIGHT_PLUS:
         motor_pair.start(speed=75)
-    elif button == PoweredUPButtons.B_MINUS:
+    elif button == PoweredUPButtons.RIGHT_MINUS:
         motor_pair.start(speed=-75)
-    elif button == PoweredUPButtons.A_PLUS_B_PLUS:
+    elif button == PoweredUPButtons.LEFT_PLUS_RIGHT_PLUS:
         motor_pair.start(steering=-45, speed=75)
-    elif button == PoweredUPButtons.A_MINUS_B_PLUS:
+    elif button == PoweredUPButtons.LEFT_MINUS_RIGHT_PLUS:
         motor_pair.start(steering=45, speed=75)
-    elif button == PoweredUPButtons.A_MINUS_B_MINUS:
+    elif button == PoweredUPButtons.LEFT_MINUS_RIGHT_MINUS:
         motor_pair.start(steering=45, speed=-75)
-    elif button == PoweredUPButtons.A_PLUS_B_MINUS:
+    elif button == PoweredUPButtons.LEFT_PLUS_RIGHT_MINUS:
         motor_pair.start(steering=-45, speed=-75)
     elif button == PoweredUPButtons.RELEASED:
         motor_pair.stop()
@@ -55,7 +55,7 @@ def on_button(button):
 hub = PrimeHub()
 
 # set up motors
-motor_pair = MotorPair('A', 'E')
+motor_pair = MotorPair('A', 'B')
 motor_pair.set_stop_action('coast')
 
 # create remote and connect

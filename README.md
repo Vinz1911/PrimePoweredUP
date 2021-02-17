@@ -6,6 +6,7 @@ The core is based on the MicroPython ubluetooth low level api.
 ### Description
 - the library use lot of memory. i recommend to pre compile the library from `remote/control` and install it on the prime hub.
 a very good way to do that is using this awesome tool: [Spike Tools](https://github.com/XenseEducation/spiketools-release/releases)
+pre compiled library can also be downloaded in releases section: [Pre-Compiled Library](https://github.com/Vinz1911/PrimePowerUP/releases)
 
 - there are two examples in `examples` folder. The first one shows how to light up dot's on Prime Hub and the second one 
 shows how to control a motor pair with the remote. examples are created by using the control.py installed as pre compiled lib

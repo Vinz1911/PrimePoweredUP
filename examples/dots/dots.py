@@ -17,7 +17,7 @@ def on_connect():
     """
     callback on connect
     """
-    hub.status_light.on("azure")
+    hub.status_light.on("blue")
 
 
 def on_disconnect():
@@ -32,6 +32,7 @@ def on_button(button):
     callback on button press
     :param button: button id
     """
+    hub.light_matrix.off()
     if button == PoweredUPButtons.LEFT_PLUS:
         hub.light_matrix.set_pixel(0, 0, brightness=100)
     elif button == PoweredUPButtons.LEFT_RED:
