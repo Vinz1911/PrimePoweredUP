@@ -1,12 +1,24 @@
+from micropython import const
 import utime
 import ubluetooth
 import ubinascii
 import struct
-from micropython import const
+
+"""
+LEGO(R) SPIKE PRIME + POWERED UP
+--------------------------------
+
+This is a basic core build on top of ubluetooth
+which has the ability to detect and connect to
+Powered UP devices from Lego. Currently only the
+Powered UP Remote is fully implemented.
+"""
 
 
-class PowerUPButtons:
-    """LEGO(R) PowerUP(TM) Button Constants"""
+class PoweredUPButtons:
+    """
+    LEGO(R) PowerUP(TM) Button Constants
+    """
 
     def __init__(self):
         pass
@@ -25,7 +37,7 @@ class PowerUPButtons:
     CENTER = const(0x0B)
 
 
-class PowerUPColors:
+class PoweredUPColors:
     """LEGO(R) PowerUP()TM Colors"""
 
     def __init__(self):
@@ -44,34 +56,44 @@ class PowerUPColors:
     WHITE = const(0x0A)
 
 
-class PowerUPRemote:
-    """Class to handle LEGO(R) PowerUP(TM) Remote"""
+class PoweredUPRemote:
+    """
+    Class to handle LEGO(R) PowerUP(TM) Remote
+    """
 
     def __init__(self):
+        """
+        Create a instance of PowerUP Remote
+        """
         # constants
         self.debug = False
         self.__POWERED_UP_REMOTE_ID = 66
-        self.__color = PowerUPColors.GREEN
+        self.__color = PoweredUPColors.BLUE
+        self.__address = None
 
+        # left buttons
         self.BUTTON_LEFT_PLUS = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x01])
         self.BUTTON_LEFT_RED = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x7F])
         self.BUTTON_LEFT_MINUS = self.__create_message([0x05, 0x00, 0x45, 0x00, 0xFF])
         self.BUTTON_LEFT_RELEASED = self.__create_message([0x05, 0x00, 0x45, 0x00, 0x00])
 
+        # right buttons
         self.BUTTON_RIGHT_PLUS = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x01])
         self.BUTTON_RIGHT_RED = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x7F])
         self.BUTTON_RIGHT_MINUS = self.__create_message([0x05, 0x00, 0x45, 0x01, 0xFF])
         self.BUTTON_RIGHT_RELEASED = self.__create_message([0x05, 0x00, 0x45, 0x01, 0x00])
 
+        # center button
         self.BUTTON_CENTER_GREEN = self.__create_message([0x05, 0x00, 0x08, 0x02, 0x01])
         self.BUTTON_CENTER_RELEASED = self.__create_message([0x05, 0x00, 0x08, 0x02, 0x00])
 
+        # constants of buttons for class
         self._LEFT_BUTTON = 0
         self._RIGHT_BUTTON = 1
         self._CENTER_BUTTON = 2
 
         # class specific
-        self.__handler = _PowerUPHandler()
+        self.__handler = _PoweredUPHandler()
         self.__buttons = [self.BUTTON_LEFT_RELEASED, self.BUTTON_RIGHT_RELEASED, self.BUTTON_CENTER_RELEASED]
 
         # callbacks
@@ -80,31 +102,68 @@ class PowerUPRemote:
         self.__disconnect_callback = None
 
     def connect(self, timeout=3000, address=None):
+        """
+        connect to a powered up remote
+
+        :param timeout: time of scanning for devices in ms, default is 3000
+        :param address: mac address of device, connect to a specific device if set
+        :returns: nothing
+        """
+        if address:
+            self.__address = ubinascii.unhexlify(address.replace(':', ''))
         self.__handler.debug = self.debug
         self.__handler.on_connect(callback=self.__on_connect)
         self.__handler.on_disconnect(callback=self.__on_disconnect)
         self.__handler.on_notify(callback=self.__on_notify)
-        if address:
-            self.__handler.connect(0, ubinascii.unhexlify(address.replace(':', '')))
-        else:
-            self.__handler.scan_start(timeout, callback=self.__on_scan)
+        self.__handler.scan_start(timeout, callback=self.__on_scan)
 
     def disconnect(self):
+        """
+        disconnect from a powered up remote
+        :returns: nothing
+        """
         self.__handler.disconnect()
 
     def set_color(self, color):
+        """
+        set color of a connected remote, use PoweredUPColors class
+
+        :param color: color byte
+        :returns: nothing
+        """
         self.__set_remote_color(color)
 
     def on_button(self, callback):
+        """
+        create a callback for button actions
+
+        :param callback: callback function, contains button data
+        :returns: nothing
+        """
         self.__button_callback = callback
 
     def on_connect(self, callback):
+        """
+        create a callback for on connect actions
+
+        :param callback: callback function
+        :returns: nothing
+        """
         self.__connect_callback = callback
 
     def on_disconnect(self, callback):
+        """
+        create a callback for on disconnect actions
+
+        :param callback: callback function
+        :returns: nothing
+        """
         self.__disconnect_callback = callback
 
-    # MARK: - Private Functions
+    """
+    private functions
+    -----------------
+    """
 
     def __create_message(self, byte_array):
         message = struct.pack('%sb' % len(byte_array), *byte_array)
@@ -114,17 +173,17 @@ class PowerUPRemote:
         color = self.__create_message([0x08, 0x00, 0x81, 0x34, 0x11, 0x51, 0x00, color_byte])
         self.__handler.write(color)
 
-    # callback for scan result
     def __on_scan(self, addr_type, addr, man_data):
-        if addr and man_data[2][1] == self.__POWERED_UP_REMOTE_ID:
-            self.__handler.connect(addr_type, addr)
+        if not self.__address:
+            if addr and man_data[2][1] == self.__POWERED_UP_REMOTE_ID:
+                self.__handler.connect(addr_type, addr)
+        else:
+            if self.__address == addr and man_data[2][1] == self.__POWERED_UP_REMOTE_ID:
+                self.__handler.connect(addr_type, addr)
 
     def __on_connect(self):
-        # enables remote left port notification
         left_port = self.__create_message([0x0A, 0x00, 0x41, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01])
-        # enables remote right port notification
         right_port = self.__create_message([0x0A, 0x00, 0x41, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01])
-        # enables notifier
         notifier = self.__create_message([0x01, 0x00])
 
         self.__set_remote_color(self.__color)
@@ -202,10 +261,15 @@ class PowerUPRemote:
 # this are not for usage outside of this environment
 
 
-class _PowerUPHandler:
-    """Class to deal with LEGO(R) PowerUp(TM) over BLE"""
+class _PoweredUPHandler:
+    """
+    Class to deal with LEGO(R) PowerUp(TM) over BLE
+    """
 
     def __init__(self):
+        """
+        Create instance of _PoweredUPHandler
+        """
         # constants
         self.__IRQ_SCAN_RESULT = const(1 << 4)
         self.__IRQ_SCAN_COMPLETE = const(1 << 5)
@@ -227,7 +291,17 @@ class _PowerUPHandler:
         self.__reset()
         self.debug = False
 
+        # callbacks
+        self.__scan_callback = None
+        self.__read_callback = None
+        self.__notify_callback = None
+        self.__connected_callback = None
+        self.__disconnected_callback = None
+
     def __reset(self):
+        """
+        reset all necessary variables
+        """
         # cached data
         self.__addr = None
         self.__addr_type = None
@@ -246,22 +320,44 @@ class _PowerUPHandler:
         self.__disconnected_callback = None
 
     def __log(self, *args):
+        """
+        log function if debug flag is set
+
+        :param args: arguments to log
+        :returns: nothing
+        """
         if not self.debug:
             return
         print(args)
 
-    # start scan for ble devices
     def scan_start(self, timeout, callback):
+        """
+        start scanning for devices
+
+        :param timeout: timeout in ms
+        :param callback: callback function, contains scan data
+        :returns: nothing
+        """
         self.__log("start scanning...")
         self.__scan_callback = callback
         self.__ble.gap_scan(timeout, 30000, 30000)
 
-    # stop current scan
     def scan_stop(self):
+        """
+        stop scanning for devices
+
+        :returns: nothing
+        """
         self.__ble.gap_scan(None)
 
-    # write gatt client data
     def write(self, data, adv_value=None):
+        """
+        write data to gatt client
+
+        :param data: data to write
+        :param adv_value: advanced value to write
+        :returns: nothing
+        """
         if not self.__is_connected():
             return
         if adv_value:
@@ -269,44 +365,74 @@ class _PowerUPHandler:
         else:
             self.__ble.gattc_write(self.__conn_handle, self.__value_handle, data)
 
-    # read gatt client
     def read(self, callback):
+        """
+        read data from gatt client
+
+        :param callback: callback function, contains readed data
+        :returns: nothing
+        """
         if not self.__is_connected():
             return
         self.__read_callback = callback
         self.__ble.gattc_read(self.__conn_handle, self.__value_handle)
 
-    # connect to ble device
     def connect(self, addr_type, addr):
+        """
+        connect to a ble device
+
+        :param addr_type: the address type of the device
+        :param addr: the devices mac a binary
+        :returns: nothing
+        """
         self.__ble.gap_connect(addr_type, addr)
 
-    # disconnect from ble device
     def disconnect(self):
+        """
+        disconnect from a ble device
+
+        :returns: nothing
+        """
         if not self.__is_connected():
             return
         self.__ble.gap_disconnect(self.__conn_handle)
 
-    # get notification
     def on_notify(self, callback):
+        """
+        create a callback for on notification actions
+
+        :param callback: callback function, contains notify data
+        :returns: nothing
+        """
         self.__notify_callback = callback
 
-    # get callback on connect
     def on_connect(self, callback):
+        """
+        create a callback for on connect actions
+
+        :param callback: callback function
+        :returns: nothing
+        """
         self.__connected_callback = callback
 
-    # get callback on connect
     def on_disconnect(self, callback):
+        """
+        create a callback for on disconnect actions
+
+        :param callback: callback function
+        :returns: nothing
+        """
         self.__disconnected_callback = callback
 
-    # MARK: - Private Functions
+    """
+    private functions
+    -----------------
+    """
 
-    # connection status
     def __is_connected(self):
         return self.__conn_handle is not None
 
-    # ble event handler
     def __irq(self, event, data):
-        # called for every result of a ble scan
         if event == self.__IRQ_SCAN_RESULT:
             addr_type, addr, adv_type, rssi, adv_data = data
             self.__log("result with uuid:", self.__decoder.decode_services(adv_data))
@@ -319,7 +445,6 @@ class _PowerUPHandler:
                 self.__man_data = self.__decoder.decode_manufacturer(adv_data)
                 self.scan_stop()
 
-        # called after a ble scan is finished
         elif event == self.__IRQ_SCAN_COMPLETE:
             if self.__addr:
                 if self.__scan_callback:
@@ -328,40 +453,33 @@ class _PowerUPHandler:
             else:
                 self.__scan_callback(None, None, None)
 
-        # called if a peripheral device is connected
         elif event == self.__IRQ_PERIPHERAL_CONNECT:
             conn_handle, addr_type, addr = data
             self.__conn_handle = conn_handle
             self.__ble.gattc_discover_services(self.__conn_handle)
 
-        # called if a peripheral device is disconnected
         elif event == self.__IRQ_PERIPHERAL_DISCONNECT:
             conn_handle, _, _ = data
             self.__disconnected_callback()
             if conn_handle == self.__conn_handle:
                 self.__reset()
 
-        # called if a service is returned
         elif event == self.__IRQ_GATTC_SERVICE_RESULT:
             conn_handle, start_handle, end_handle, uuid = data
             if conn_handle == self.__conn_handle and uuid == self.__LEGO_SERVICE_UUID:
                 self.__ble.gattc_discover_characteristics(self.__conn_handle, start_handle, end_handle)
 
-        # called if a characteristic is returned
         elif event == self.__IRQ_GATTC_CHARACTERISTIC_RESULT:
             conn_handle, def_handle, value_handle, properties, uuid = data
             if conn_handle == self.__conn_handle and uuid == self.__LEGO_SERVICE_CHAR:
                 self.__value_handle = value_handle
-                # finished discovering, connecting finished
                 self.__connected_callback()
 
-        # called if data was successfully read
         elif event == self.__IRQ_GATTC_READ_RESULT:
             conn_handle, value_handle, char_data = data
             if self.__read_callback:
                 self.__read_callback(char_data)
 
-        # called if a notification appears
         elif event == self.__IRQ_GATTC_NOTIFY:
             conn_handle, value_handle, notify_data = data
             if self.__notify_callback:
@@ -369,12 +487,23 @@ class _PowerUPHandler:
 
 
 class _Decoder:
-    """Class to decode BLE adv_data"""
+    """
+    Class to decode BLE adv_data
+    """
 
     def __init__(self):
+        """
+        create instance of _Decoder
+        """
         self.__COMPANY_IDENTIFIER_CODES = {"0397": "LEGO System A/S"}
 
     def decode_manufacturer(self, payload):
+        """
+        decode manufacturer information from ble data
+
+        :param payload: payload data to decode
+        :returns: nothing
+        """
         man_data = []
         n = self.__decode_field(payload, const(0xFF))
         if not n:
@@ -388,10 +517,22 @@ class _Decoder:
         return man_data
 
     def decode_name(self, payload):
+        """
+        decode name information from ble data
+
+        :param payload: payload data to decode
+        :returns: nothing
+        """
         n = self.__decode_field(payload, const(0x09))
         return str(n[0], "utf-8") if n else "parsing failed!"
 
     def decode_services(self, payload):
+        """
+        decode services information from ble data
+
+        :param payload: payload data to decode
+        :returns: nothing
+        """
         services = []
         for u in self.__decode_field(payload, const(0x3)):
             services.append(ubluetooth.UUID(struct.unpack("<h", u)[0]))
@@ -400,6 +541,11 @@ class _Decoder:
         for u in self.__decode_field(payload, const(0x7)):
             services.append(ubluetooth.UUID(u))
         return services
+
+    """
+    private functions
+    -----------------
+    """
 
     def __decode_field(self, payload, adv_type):
         i = 0
