@@ -1,20 +1,20 @@
 # PrimePoweredUP
 
-`PrimePoweredUP` contains a library for Lego Spike Prime to connect to PoweredUP Remote (Handset) over BLE.
+`PrimePoweredUP` contains a library for Lego Spike Prime / Robot Inventor to connect to the Lego PoweredUP Remote (Handset) over BLE.
 The core is based on the MicroPython ubluetooth low level api.
 
 ### Compatibility
 - Works with the latest version of `Spike Prime` and `Mindstorms Robot Inventor`.
 
 ### Description
-- the library is build for the use inside the `Python VM`. This means you need the advanced Python setup for the Spike Prime.
+- the library is build for the use inside the `Lego Python VM`. This means you need the advanced Python setup for the Spike Prime / Robot Inventor.
 - for an easy start with the advanced Python setup, it's recommended to use VSCode with this plugin: [Spike Prime/RI Extension](https://marketplace.visualstudio.com/items?itemName=PeterStaev.lego-spikeprime-mindstorms-vscode).
-- **WARNING: LIBRARY DOES NOT WORK WITH THE REGULAR PYTHON SETUP**
+- **WARNING:** the library does **not** work with the normal python setup due to `async/await` of the connection process.
 - examples can be found in `./examples` directory.
 
 ### Usage
-- The pre-compiled library is inside of the `./remote` directory, it's recommended to copy the library inside the `./spike` directory
-of the Spike Prime. You can do this by using a script or with [rshell](https://github.com/dhylands/rshell).
+- The pre-compiled library is inside the `./remote` directory, it's recommended to copy the library inside the `./spike` directory
+of the Spike Prime / Robot Inventor. You can do this by using a script or with [rshell](https://github.com/dhylands/rshell).
 
 ```bash
 # example using rshell
@@ -30,7 +30,6 @@ Welcome to rshell. Use Control-D (or the exit command) to exit rshell.
 #### Example
 ```python
 from runtime import VirtualMachine
-from spike import PrimeHub, MotorPair
 from spike.remote import Remote, Buttons
 from util.print_override import spikeprint as print
 
@@ -40,7 +39,9 @@ remote = Remote()
 
 async def on_start(vm, stack):
     print("connecting...")
-    await remote.connect() # wait for connecting establishment
+    await remote.connect() # wait for connection establishment
+    # it's also possible to connect to specific address
+    # await remote.connect(address="00:11:22:33:FF:EE")
     print("connected")
     
     while True:
