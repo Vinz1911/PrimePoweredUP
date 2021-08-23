@@ -40,6 +40,8 @@ remote = Remote()
 async def on_start(vm, stack):
     print("connecting...")
     await remote.connect() # wait for connection establishment
+    # it's also possible to connect to specific address
+    # await remote.connect(address="00:11:22:33:FF:EE")
     print("connected")
     
     while True:
