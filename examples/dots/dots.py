@@ -1,65 +1,34 @@
-from spike import PrimeHub, LightMatrix, Button, StatusLight, ForceSensor, MotionSensor, Speaker, ColorSensor, App, DistanceSensor, Motor, MotorPair
-from spike.control import wait_for_seconds, wait_until, Timer
-from remote.control import PoweredUPRemote, PoweredUPColors, PoweredUPButtons
+from runtime import VirtualMachine
+from spike import PrimeHub
+from spike.remote import Remote, Buttons
+from util.print_override import spikeprint as print
 
-"""
-LEGO(R) SPIKE PRIME + POWERED UP
---------------------------------
-
-This is a basic example:
-This example let light up different dot's on
-a prime/inventor hub for different buttons pressed
-on the powered up remote
-"""
+# create remote
+remote = Remote()
 
 
-def on_connect():
-    """
-    callback on connect
-    """
-    hub.status_light.on("blue")
+async def on_start(vm, stack):
+    hub = PrimeHub()
+    print("connecting...")
+    await remote.connect()
+    print("connected")
+    hub.status_light.on('blue')
+
+    while True:
+        buttons = remote.pressed()
+        if Buttons.LEFT in buttons: hub.light_matrix.set_pixel(0, 0, brightness=100)
+        if Buttons.LEFT not in buttons: hub.light_matrix.set_pixel(0, 0, brightness=0)
+        if Buttons.RIGHT in buttons: hub.light_matrix.set_pixel(0, 1, brightness=100)
+        if Buttons.RIGHT not in buttons: hub.light_matrix.set_pixel(0, 1, brightness=0)
+        yield
 
 
-def on_disconnect():
-    """
-    callback on disconnect
-    """
-    hub.status_light.on("white")
+async def on_cancel(vm, stack):
+    remote.cancel()
 
 
-def on_button(button):
-    """
-    callback on button press
-    :param button: button id
-    """
-    hub.light_matrix.off()
-    if button == PoweredUPButtons.LEFT_PLUS:
-        hub.light_matrix.set_pixel(0, 0, brightness=100)
-    elif button == PoweredUPButtons.LEFT_RED:
-        hub.light_matrix.set_pixel(1, 0, brightness=100)
-    elif button == PoweredUPButtons.LEFT_MINUS:
-        hub.light_matrix.set_pixel(2, 0, brightness=100)
-    elif button == PoweredUPButtons.RIGHT_PLUS:
-        hub.light_matrix.set_pixel(3, 0, brightness=100)
-    elif button == PoweredUPButtons.RIGHT_RED:
-        hub.light_matrix.set_pixel(4, 0, brightness=100)
-    elif button == PoweredUPButtons.RIGHT_MINUS:
-        hub.light_matrix.set_pixel(0, 1, brightness=100)
-    elif button == PoweredUPButtons.LEFT_PLUS_RIGHT_PLUS:
-        hub.light_matrix.set_pixel(0, 2, brightness=100)
-    elif button == PoweredUPButtons.RELEASED:
-        hub.light_matrix.off()
-    else:
-        hub.light_matrix.off()
-
-
-# set up hub
-hub = PrimeHub()
-
-# create remote and connect
-remote = PoweredUPRemote()
-remote.debug = True
-remote.on_connect(callback=on_connect)
-remote.on_disconnect(callback=on_disconnect)
-remote.on_button(callback=on_button)
-remote.connect()
+def setup(rpc, system, stop):
+    vm = VirtualMachine(rpc, system, stop, "3f157bda4908")
+    vm.register_on_start("f76afdd318a1", on_start)
+    vm.register_on_button("accda9ebca74", on_cancel, "center", "pressed")
+    return vm

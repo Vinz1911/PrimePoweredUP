@@ -1,66 +1,40 @@
-from spike import PrimeHub, LightMatrix, Button, StatusLight, ForceSensor, MotionSensor, Speaker, ColorSensor, App, DistanceSensor, Motor, MotorPair
-from spike.control import wait_for_seconds, wait_until, Timer
-from remote.control import PoweredUPRemote, PoweredUPColors, PoweredUPButtons
+from runtime import VirtualMachine
+from spike import PrimeHub, MotorPair
+from spike.remote import Remote, Buttons
+from util.print_override import spikeprint as print
 
-"""
-LEGO(R) SPIKE PRIME + POWERED UP
---------------------------------
-
-This is a basic example:
-This example let control a motor pair
-with the powered up remote
-"""
+# create remote
+remote = Remote()
 
 
-def on_connect():
-    """
-    callback on connect
-    """
-    hub.status_light.on("blue")
+async def on_start(vm, stack):
+    hub = PrimeHub()
+    pair = MotorPair('A', 'B')
+    pair.set_stop_action('coast')
+
+    print("connecting...")
+    await remote.connect()
+    print("connected")
+    hub.status_light.on('blue')
+
+    while True:
+        buttons = remote.pressed()
+        if buttons == (Buttons.RIGHT_PLUS,): pair.start(speed=65)
+        elif buttons == (Buttons.RIGHT_MINUS,): pair.start(speed=-65)
+        elif buttons == (Buttons.LEFT_MINUS, Buttons.RIGHT_PLUS): pair.start(speed=65, steering=-45)
+        elif buttons == (Buttons.LEFT_PLUS, Buttons.RIGHT_PLUS): pair.start(speed=65, steering=45)
+        elif buttons == (Buttons.LEFT_MINUS, Buttons.RIGHT_MINUS): pair.start(speed=-65, steering=-45)
+        elif buttons == (Buttons.LEFT_PLUS, Buttons.RIGHT_MINUS): pair.start(speed=-65, steering=45)
+        else: pair.stop()
+        yield
 
 
-def on_disconnect():
-    """
-    callback on disconnect
-    """
-    hub.status_light.on("white")
-    motor_pair.stop()
+async def on_cancel(vm, stack):
+    remote.cancel()
 
 
-def on_button(button):
-    """
-    callback on button press
-
-    :param button: button id
-    """
-    if button == PoweredUPButtons.RIGHT_PLUS:
-        motor_pair.start(speed=75)
-    elif button == PoweredUPButtons.RIGHT_MINUS:
-        motor_pair.start(speed=-75)
-    elif button == PoweredUPButtons.LEFT_PLUS_RIGHT_PLUS:
-        motor_pair.start(steering=-45, speed=75)
-    elif button == PoweredUPButtons.LEFT_MINUS_RIGHT_PLUS:
-        motor_pair.start(steering=45, speed=75)
-    elif button == PoweredUPButtons.LEFT_MINUS_RIGHT_MINUS:
-        motor_pair.start(steering=45, speed=-75)
-    elif button == PoweredUPButtons.LEFT_PLUS_RIGHT_MINUS:
-        motor_pair.start(steering=-45, speed=-75)
-    elif button == PoweredUPButtons.RELEASED:
-        motor_pair.stop()
-    else:
-        motor_pair.stop()
-
-
-# set up hub
-hub = PrimeHub()
-
-# set up motors
-motor_pair = MotorPair('A', 'B')
-motor_pair.set_stop_action('coast')
-
-# create remote and connect
-remote = PoweredUPRemote()
-remote.on_connect(callback=on_connect)
-remote.on_disconnect(callback=on_disconnect)
-remote.on_button(callback=on_button)
-remote.connect()
+def setup(rpc, system, stop):
+    vm = VirtualMachine(rpc, system, stop, "3f157bda4908")
+    vm.register_on_start("f76afdd318a1", on_start)
+    vm.register_on_button("accda9ebca74", on_cancel, "center", "pressed")
+    return vm
