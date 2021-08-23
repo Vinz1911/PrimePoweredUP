@@ -1,19 +1,68 @@
-# PrimePowerUP
+# PrimePoweredUP
 
 `PrimePoweredUP` contains a library for Lego Spike Prime to connect to PoweredUP Remote (Handset) over BLE.
 The core is based on the MicroPython ubluetooth low level api.
 
+### Compatibility
+- Works with the latest version of `Spike Prime` and `Mindstorms Robot Inventor`.
+
 ### Description
-- the library use lot of memory. i recommend to pre compile the library from `remote/control` and install it on the prime hub.
-a very good way to do that is using this awesome tool: [Spike Tools](https://github.com/XenseEducation/spiketools-release/releases)
-pre compiled library can also be downloaded in releases section: [Pre-Compiled Library](https://github.com/Vinz1911/PrimePowerUP/releases)
+- the library is build for the use inside the `Python VM`. This means you need the advanced Python setup for the Spike Prime.
+- for an easy start with the advanced Python setup, it's recommended to use VSCode with this plugin: [Spike Prime/RI Extension](https://marketplace.visualstudio.com/items?itemName=PeterStaev.lego-spikeprime-mindstorms-vscode).
+- **WARNING: LIBRARY DOES NOT WORK WITH THE REGULAR PYTHON SETUP**
+- examples can be found in `./examples` directory.
 
-- there are two examples in `examples` folder. The first one shows how to light up dot's on Prime Hub and the second one 
-shows how to control a motor pair with the remote. examples are created by using the control.py installed as pre compiled lib
-(it's also possible to copy all together and load it on the hub)
+### Usage
+- The pre-compiled library is inside of the `./remote` directory, it's recommended to copy the library inside the `./spike` directory
+of the Spike Prime. You can do this by using a script or with [rshell](https://github.com/dhylands/rshell).
 
-### Known Problems:
-- the ubluetooth class has some problems with event loop based functions from Lego. This means, if you run a event loop based
-function within the button pressed callback, the entire hub will freeze. This is currently not possible to fix that, maybe with 
-a new firmare which supports uasyncio library. **Event based functions ?!** are functions like playing sound until end, wait for or 
-motor functions like run_to_position or run_for_degrees and so on.
+```bash
+# example using rshell
+Connecting to /dev/cu.usbmodem3382397933381 (buffer-size 512)...
+Trying to connect to REPL  connected
+Retrieving sysname ... LEGO Technic Large Hub
+...
+Welcome to rshell. Use Control-D (or the exit command) to exit rshell.
+
+# copy file to hub
+/remote> cp ./remote.mpy /pyboard/spike/
+```
+#### Example
+```python
+from runtime import VirtualMachine
+from spike import PrimeHub, MotorPair
+from spike.remote import Remote, Buttons
+from util.print_override import spikeprint as print
+
+# create remote
+remote = Remote()
+
+
+async def on_start(vm, stack):
+    print("connecting...")
+    await remote.connect() # wait for connecting establishment
+    print("connected")
+    
+    while True:
+        buttons = remote.pressed() # read pressed buttons
+        print(buttons) # Output is a tuple for example: (LEFT_PLUS, RIGHT_PLUS, CENTER)
+        yield
+
+
+async def on_cancel(vm, stack):
+    remote.cancel() # disconnect if the program exit's 
+
+
+def setup(rpc, system, stop):
+    vm = VirtualMachine(rpc, system, stop, "3f157bda4908")
+    vm.register_on_start("f76afdd318a1", on_start)
+    vm.register_on_button("accda9ebca74", on_cancel, "center", "pressed")
+    return vm
+```
+
+### Known Issues:
+- The library uses an async connection process, this is why we need the python vm for the usage. performance is also better.
+- The library uses internally ble notification service, sometimes the hub needs a restart to make this work (if tuple is empty on button press).
+- I didn't found a good way to disconnect the remote if you reach the end of a program (there is currently no way to run `cleanup` code on program's end). fallback solution is to use the `Start/Stop` button.
+So just for clarification: **remote needs to be reconnected on program start**. if your program is exited and the remote is still connected
+you need to unpair the remote by holding the green button until it's unpaired.
