@@ -14,8 +14,6 @@ async def on_start(vm, stack):
     print("connected")
     hub.status_light.on('blue')
 
-    print(remote.button)
-
     while True:
         buttons = remote.pressed()
         if remote.button.LEFT_PLUS in buttons: hub.light_matrix.set_pixel(0, 0, brightness=100)
