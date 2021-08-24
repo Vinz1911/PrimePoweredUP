@@ -16,7 +16,7 @@ class Remote:
         self.__pressed = tuple()
         self.__state = [""] * 7
 
-    async def connect(self, timeout=5000, address=None):
+    async def connect(self, timeout: int = 5000, address: str = None):
         if address: self.__address = ubinascii.unhexlify(address.replace(':', ''))
         self.__ble_const = _RemoteConstant()
         self.__ble.gap_scan(timeout, 30000, 30000)
@@ -26,11 +26,11 @@ class Remote:
         self.__ble.gap_scan(None)
         if self.__ble_const.conn_handle: self.__ble.gap_disconnect(self.__ble_const.conn_handle)
 
-    def pressed(self):
+    def pressed(self) -> tuple:
         if not self.__pressed: self.__pressed = tuple()
         return self.__pressed
 
-    def address(self):
+    def address(self) -> str:
         if not self.__address: return None
         return ubinascii.hexlify(self.__address, ":").decode("UTF-8")
 
@@ -38,16 +38,16 @@ class Remote:
         color = _Decoder.bytes([0x0A, 0x00, 0x81, 0x34, 0x00, 0x51, 0x01, red, green, blue])
         self.__write_bytes(color)
 
-    def __handle_status(self, enabled: bool):
-        self.__ble_const.enabled = enabled
-        if enabled: self.color(0x00, 0x00, 0xFF)
-
-    def __handle_enabled(self):
+    def is_connected(self) -> bool:
         return self.__ble_const.conn_handle is not None
+
+    def __setup_finish(self):
+        self.__ble_const.enabled = True
+        self.color(0x00, 0x00, 0xFF)
 
     def __write_bytes(self, data, adv_value=None, callback=None):
         try:
-            if not self.__handle_enabled(): return
+            if not self.is_connected(): return
             if adv_value: self.__ble.gattc_write(self.__ble_const.conn_handle, adv_value, data, True)
             else: self.__ble.gattc_write(self.__ble_const.conn_handle, self.__ble_const.value_handle, data, True)
             self.__write_callback = callback
@@ -63,33 +63,33 @@ class Remote:
         elif event == _RemoteConstant.IRQ_GATTC_WRITE_DONE: self.__gattc_write_done(data)
         elif event == _RemoteConstant.IRQ_GATTC_NOTIFY: self.__gattc_notify(data)
 
-    def __scan_result(self, data):
+    def __scan_result(self, data: bytes):
         addr_type, addr, _, _, adv_data = data
         if _RemoteConstant.SERVICE_UUID in _Decoder.decode_services(adv_data):
             self.__ble_const.addr_type = addr_type
-            self.__ble_const.addr = bytes(addr)
+            self.__ble_const.addr = addr
             self.__ble_const.man_data = _Decoder.company_data(adv_data)
             self.__ble.gap_scan(None)
 
-    def __scan_complete(self, data):
+    def __scan_complete(self, data: bytes):
         if not self.__ble_const.addr: return
         if not self.__address: self.__address = self.__ble_const.addr
         if self.__address == self.__ble_const.addr and self.__ble_const.man_data[1] == 66: self.__ble.gap_connect(self.__ble_const.addr_type, self.__ble_const.addr)
 
-    def __peripheral_connect(self, data):
+    def __peripheral_connect(self, data: bytes):
         conn_handle, _, _ = data
         self.__ble_const.conn_handle = conn_handle
         self.__ble.gattc_discover_services(self.__ble_const.conn_handle)
 
-    def __peripheral_disconnect(self, data):
+    def __peripheral_disconnect(self, data: bytes):
         self.__pressed = tuple()
         self.__ble_const.conn_handle = None
 
-    def __gattc_service_result(self, data):
+    def __gattc_service_result(self, data: bytes):
         conn_handle, start_handle, end_handle, uuid = data
         if conn_handle == self.__ble_const.conn_handle and uuid == _RemoteConstant.SERVICE_UUID: self.__ble.gattc_discover_characteristics(self.__ble_const.conn_handle, start_handle, end_handle)
 
-    def __gattc_characteristic_result(self, data):
+    def __gattc_characteristic_result(self, data: bytes):
         conn_handle, _, value_handle, _, uuid = data
         if conn_handle == self.__ble_const.conn_handle and uuid == _RemoteConstant.SERVICE_CHAR:
             self.__ble_const.value_handle = value_handle
@@ -101,12 +101,12 @@ class Remote:
             self.__write_bytes(rgb_mode, callback=lambda:
             self.__write_bytes(left_port, callback=lambda:
             self.__write_bytes(right_port, callback=lambda:
-            self.__write_bytes(notifier, 0x0C, callback=lambda: self.__handle_status(True)))))
+            self.__write_bytes(notifier, 0x0C, callback=lambda: self.__setup_finish()))))
 
-    def __gattc_write_done(self, data):
+    def __gattc_write_done(self, data: bytes):
             if self.__write_callback: self.__write_callback()
 
-    def __gattc_notify(self, data):
+    def __gattc_notify(self, data: bytes):
         _, _, notify_data = data
         if notify_data[0] == 0x5 and notify_data[2] == 0x8 and notify_data[3] == 0x2:
             self.__state[6] = _RemoteConstant.Center_Button[notify_data[4]]
@@ -152,12 +152,12 @@ class _RemoteConstant:
     Center_Button = {0x0: "", 0x1: "CENTER"}
 
     def __init__(self):
-        self.addr = None
-        self.addr_type = None
-        self.man_data = None
-        self.conn_handle = None
-        self.value_handle = None
-        self.enabled = False
+        self.addr: bytes = None
+        self.addr_type: bytes = None
+        self.man_data: bytes = None
+        self.conn_handle: bytes = None
+        self.value_handle: bytes = None
+        self.enabled: bool = False
 
 
 class _Decoder:
