@@ -1,3 +1,9 @@
+from runtime import VirtualMachine
+from spike import PrimeHub, MotorPair
+from spike.remote import Remote, Buttons
+import hub
+from util.print_override import spikeprint as print
+
 from micropython import const
 import ubluetooth
 import ubinascii
@@ -190,3 +196,31 @@ class _Decoder:
             if payload[i + 1] == adv_type: result.append(payload[i + 2: i + payload[i] + 1])
             i += 1 + payload[i]
         return result
+
+
+# create remote
+remote = Remote()
+
+async def on_start(vm, stack):
+    print("connecting...")
+    await remote.connect()
+    print("connected")
+
+    while True:
+        buttons = remote.pressed()
+        print(buttons)
+        if remote.button.LEFT_PLUS in buttons: remote.color(0xFF, 0x00, 0x00)
+        if remote.button.LEFT in buttons: remote.color(0x00, 0xFF, 0x00)
+        if remote.button.LEFT_MINUS in buttons: remote.color(0x00, 0x00, 0xFF)
+        yield
+
+
+async def on_cancel(vm, stack):
+    remote.cancel()
+
+
+def setup(rpc, system, stop):
+    vm = VirtualMachine(rpc, system, stop, "3f157bda4908")
+    vm.register_on_start("f76afdd318a1", on_start)
+    vm.register_on_button("accda9ebca74", on_cancel, "center", "pressed")
+    return vm
