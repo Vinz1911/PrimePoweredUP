@@ -1,6 +1,6 @@
 from runtime import VirtualMachine
 from spike import PrimeHub, MotorPair
-from spike.remote import Remote, Buttons
+from spike.remote import Remote
 import hub
 from util.print_override import spikeprint as print
 
@@ -33,12 +33,12 @@ async def on_start(vm, stack):
 
     while True:
         buttons = remote.pressed()
-        if buttons == (Buttons.RIGHT_PLUS,): pair.start(speed=65)
-        elif buttons == (Buttons.RIGHT_MINUS,): pair.start(speed=-65)
-        elif buttons == (Buttons.LEFT_MINUS, Buttons.RIGHT_PLUS): pair.start(speed=65, steering=-45)
-        elif buttons == (Buttons.LEFT_PLUS, Buttons.RIGHT_PLUS): pair.start(speed=65, steering=45)
-        elif buttons == (Buttons.LEFT_MINUS, Buttons.RIGHT_MINUS): pair.start(speed=-65, steering=-45)
-        elif buttons == (Buttons.LEFT_PLUS, Buttons.RIGHT_MINUS): pair.start(speed=-65, steering=45)
+        if buttons == (remote.button.RIGHT_PLUS,): pair.start(speed=65)
+        elif buttons == (remote.button.RIGHT_MINUS,): pair.start(speed=-65)
+        elif buttons == (remote.button.LEFT_MINUS, remote.button.RIGHT_PLUS): pair.start(speed=65, steering=-45)
+        elif buttons == (remote.button.LEFT_PLUS, remote.button.RIGHT_PLUS): pair.start(speed=65, steering=45)
+        elif buttons == (remote.button.LEFT_MINUS, remote.button.RIGHT_MINUS): pair.start(speed=-65, steering=-45)
+        elif buttons == (remote.button.LEFT_PLUS, remote.button.RIGHT_MINUS): pair.start(speed=-65, steering=45)
         else: pair.stop()
         yield
 
