@@ -17,16 +17,14 @@ class Remote:
         self.__state = [""] * 7
 
     async def connect(self, timeout=5000, address=None):
-        try:
-            if address: self.__address = ubinascii.unhexlify(address.replace(':', ''))
-            self.__ble_const = _RemoteConstant()
-            self.__ble.gap_scan(timeout, 30000, 30000)
-            while not self.__ble_const.enabled: yield
-        except: self.cancel()
+        if address: self.__address = ubinascii.unhexlify(address.replace(':', ''))
+        self.__ble_const = _RemoteConstant()
+        self.__ble.gap_scan(timeout, 30000, 30000)
+        while not self.__ble_const.enabled: yield
 
     def cancel(self):
         self.__ble.gap_scan(None)
-        self.__ble.gap_disconnect(self.__ble_const.conn_handle)
+        if self.__ble_const.conn_handle: self.__ble.gap_disconnect(self.__ble_const.conn_handle)
 
     def pressed(self):
         if not self.__pressed: self.__pressed = tuple()
@@ -56,16 +54,14 @@ class Remote:
         except: pass
 
     def __irq(self, event, data):
-        try:
-            if event == _RemoteConstant.IRQ_SCAN_RESULT: self.__scan_result(data)
-            elif event == _RemoteConstant.IRQ_SCAN_DONE: self.__scan_complete(data)
-            elif event == _RemoteConstant.IRQ_PERIPHERAL_CONNECT: self.__peripheral_connect(data)
-            elif event == _RemoteConstant.IRQ_PERIPHERAL_DISCONNECT: self.__peripheral_disconnect(data)
-            elif event == _RemoteConstant.IRQ_GATTC_SERVICE_RESULT: self.__gattc_service_result(data)
-            elif event == _RemoteConstant.IRQ_GATTC_CHARACTERISTIC_RESULT: self.__gattc_characteristic_result(data)
-            elif event == _RemoteConstant.IRQ_GATTC_WRITE_DONE: self.__gattc_write_done(data)
-            elif event == _RemoteConstant.IRQ_GATTC_NOTIFY: self.__gattc_notify(data)
-        except: self.cancel()
+        if event == _RemoteConstant.IRQ_SCAN_RESULT: self.__scan_result(data)
+        elif event == _RemoteConstant.IRQ_SCAN_DONE: self.__scan_complete(data)
+        elif event == _RemoteConstant.IRQ_PERIPHERAL_CONNECT: self.__peripheral_connect(data)
+        elif event == _RemoteConstant.IRQ_PERIPHERAL_DISCONNECT: self.__peripheral_disconnect(data)
+        elif event == _RemoteConstant.IRQ_GATTC_SERVICE_RESULT: self.__gattc_service_result(data)
+        elif event == _RemoteConstant.IRQ_GATTC_CHARACTERISTIC_RESULT: self.__gattc_characteristic_result(data)
+        elif event == _RemoteConstant.IRQ_GATTC_WRITE_DONE: self.__gattc_write_done(data)
+        elif event == _RemoteConstant.IRQ_GATTC_NOTIFY: self.__gattc_notify(data)
 
     def __scan_result(self, data):
         addr_type, addr, _, _, adv_data = data
@@ -112,8 +108,8 @@ class Remote:
 
     def __gattc_notify(self, data):
         _, _, notify_data = data
-        if notify_data[0] == 0x4 or notify_data[0] == 0x5 and notify_data[2] == 0x8:
-            self.__state[6] = _RemoteConstant.Center_Button[notify_data[3]]
+        if notify_data[0] == 0x5 and notify_data[2] == 0x8 and notify_data[3] == 0x2:
+            self.__state[6] = _RemoteConstant.Center_Button[notify_data[4]]
         if notify_data[0] == 0x7 and notify_data[2] == 0x45:
             if notify_data[3] == 0x0:
                 self.__state[0] = _RemoteConstant.Left_Button[0][notify_data[4]]
@@ -153,7 +149,7 @@ class _RemoteConstant:
 
     Left_Button = [{0x0: "", 0x1: "LEFT_PLUS"}, {0x0: "", 0x1: "LEFT"}, {0x0: "", 0x1: "LEFT_MINUS"}]
     Right_Button = [{0x0: "", 0x1: "RIGHT_PLUS"}, {0x0: "", 0x1: "RIGHT"}, {0x0: "", 0x1: "RIGHT_MINUS"}]
-    Center_Button = {0x2: "CENTER", 0x3: ""}
+    Center_Button = {0x0: "", 0x1: "CENTER"}
 
     def __init__(self):
         self.addr = None
