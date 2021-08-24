@@ -10,7 +10,8 @@ The core is based on the MicroPython ubluetooth low level api.
 - the library is build for the use inside the `Lego Python VM`. This means you need the advanced Python setup for the Spike Prime / Robot Inventor.
 - for an easy start with the advanced Python setup, it's recommended to use VSCode with this plugin: [Spike Prime/RI Extension](https://marketplace.visualstudio.com/items?itemName=PeterStaev.lego-spikeprime-mindstorms-vscode).
 - **WARNING:** the library does **not** work with the normal python setup due to `async/await` of the connection process.
-- examples can be found in `./examples` directory.
+- examples can be found in `./examples` 
+- **Feature:** all buttons can be used at the same time!
 
 ### Usage
 - The pre-compiled library is inside the `./remote` directory, it's recommended to copy the library inside the `./spike` directory
@@ -27,10 +28,10 @@ Welcome to rshell. Use Control-D (or the exit command) to exit rshell.
 # copy file to hub
 /remote> cp ./remote.mpy /pyboard/spike/
 ```
-#### Example
+#### Examples
 ```python
 from runtime import VirtualMachine
-from spike.remote import Remote, Buttons
+from spike.remote import Remote
 from util.print_override import spikeprint as print
 
 # create remote
@@ -46,7 +47,7 @@ async def on_start(vm, stack):
     
     while True:
         buttons = remote.pressed() # read pressed buttons
-        print(buttons) # Output is a tuple for example: (LEFT_PLUS, RIGHT_PLUS, CENTER)
+        print(buttons) # Output is a tuple for example: (LEFT_PLUS, LEFT, LEFT_MINUS)
         yield
 
 
@@ -59,6 +60,38 @@ def setup(rpc, system, stop):
     vm.register_on_start("f76afdd318a1", on_start)
     vm.register_on_button("accda9ebca74", on_cancel, "center", "pressed")
     return vm
+```
+
+```python
+from spike.remote import Remote
+
+# remote buttons:
+remote = Remote()
+remote.connect()
+
+# left buttons
+remote.button.LEFT_PLUS
+remote.button.LEFT
+remote.button.LEFT_MINUS
+
+# right buttons
+remote.button.RIGHT_PLUS
+remote.button.RIGHT
+remote.button.RIGHT_MINUS
+
+# center
+remote.button.CENTER
+
+# buttons are iterable
+# check for buttons
+
+while True:
+    buttons = remote.pressed()
+    for remote.button.LEFT in buttons: print("Left pressed!")
+    
+    # check tuple
+    if buttons == (remote.button.LEFT_PLUS, remote.button.RIGHT_PLUS): print("Left Plus and Right Plus pressed!")
+
 ```
 
 ### Known Issues:

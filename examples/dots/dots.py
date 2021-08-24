@@ -1,6 +1,6 @@
 from runtime import VirtualMachine
 from spike import PrimeHub
-from spike.remote import Remote, Buttons
+from spike.remote import Remote
 from util.print_override import spikeprint as print
 
 # create remote
@@ -14,12 +14,23 @@ async def on_start(vm, stack):
     print("connected")
     hub.status_light.on('blue')
 
+    print(remote.button)
+
     while True:
         buttons = remote.pressed()
-        if Buttons.LEFT in buttons: hub.light_matrix.set_pixel(0, 0, brightness=100)
-        if Buttons.LEFT not in buttons: hub.light_matrix.set_pixel(0, 0, brightness=0)
-        if Buttons.RIGHT in buttons: hub.light_matrix.set_pixel(0, 1, brightness=100)
-        if Buttons.RIGHT not in buttons: hub.light_matrix.set_pixel(0, 1, brightness=0)
+        if remote.button.LEFT_PLUS in buttons: hub.light_matrix.set_pixel(0, 0, brightness=100)
+        if remote.button.LEFT_PLUS not in buttons: hub.light_matrix.set_pixel(0, 0, brightness=0)
+        if remote.button.LEFT in buttons: hub.light_matrix.set_pixel(0, 2, brightness=100)
+        if remote.button.LEFT not in buttons: hub.light_matrix.set_pixel(0, 2, brightness=0)
+        if remote.button.LEFT_MINUS in buttons: hub.light_matrix.set_pixel(0, 4, brightness=100)
+        if remote.button.LEFT_MINUS not in buttons: hub.light_matrix.set_pixel(0, 4, brightness=0)
+
+        if remote.button.RIGHT_PLUS in buttons: hub.light_matrix.set_pixel(4, 0, brightness=100)
+        if remote.button.RIGHT_PLUS not in buttons: hub.light_matrix.set_pixel(4, 0, brightness=0)
+        if remote.button.RIGHT in buttons: hub.light_matrix.set_pixel(4, 2, brightness=100)
+        if remote.button.RIGHT not in buttons: hub.light_matrix.set_pixel(4, 2, brightness=0)
+        if remote.button.RIGHT_MINUS in buttons: hub.light_matrix.set_pixel(4, 4, brightness=100)
+        if remote.button.RIGHT_MINUS not in buttons: hub.light_matrix.set_pixel(4, 4, brightness=0)
         yield
 
 
