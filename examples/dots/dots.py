@@ -8,27 +8,35 @@ remote = Remote()
 
 
 async def on_start(vm, stack):
-    hub = PrimeHub()
-    print("connecting...")
+    prime = PrimeHub()
+    # connect remote
     await remote.connect()
-    print("connected")
-    hub.status_light.on('blue')
+
+    # set colors of remote and hub
+    prime.status_light.on('cyan')
+    remote.color(remote.colors.LIGHTGREEN)
 
     while True:
+        # read pressed buttons
         buttons = remote.pressed()
-        if remote.button.LEFT_PLUS in buttons: hub.light_matrix.set_pixel(0, 0, brightness=100)
-        if remote.button.LEFT_PLUS not in buttons: hub.light_matrix.set_pixel(0, 0, brightness=0)
-        if remote.button.LEFT in buttons: hub.light_matrix.set_pixel(0, 2, brightness=100)
-        if remote.button.LEFT not in buttons: hub.light_matrix.set_pixel(0, 2, brightness=0)
-        if remote.button.LEFT_MINUS in buttons: hub.light_matrix.set_pixel(0, 4, brightness=100)
-        if remote.button.LEFT_MINUS not in buttons: hub.light_matrix.set_pixel(0, 4, brightness=0)
 
-        if remote.button.RIGHT_PLUS in buttons: hub.light_matrix.set_pixel(4, 0, brightness=100)
-        if remote.button.RIGHT_PLUS not in buttons: hub.light_matrix.set_pixel(4, 0, brightness=0)
-        if remote.button.RIGHT in buttons: hub.light_matrix.set_pixel(4, 2, brightness=100)
-        if remote.button.RIGHT not in buttons: hub.light_matrix.set_pixel(4, 2, brightness=0)
-        if remote.button.RIGHT_MINUS in buttons: hub.light_matrix.set_pixel(4, 4, brightness=100)
-        if remote.button.RIGHT_MINUS not in buttons: hub.light_matrix.set_pixel(4, 4, brightness=0)
+        # stop vm if remote get disconnected
+        if buttons is None: vm.stop(); break
+
+        # change pixel from the hub based on pressed button
+        if remote.buttons.LEFT_PLUS in buttons: prime.light_matrix.set_pixel(0, 0, brightness=100)
+        if remote.buttons.LEFT_PLUS not in buttons: prime.light_matrix.set_pixel(0, 0, brightness=0)
+        if remote.buttons.LEFT in buttons: prime.light_matrix.set_pixel(0, 2, brightness=100)
+        if remote.buttons.LEFT not in buttons: prime.light_matrix.set_pixel(0, 2, brightness=0)
+        if remote.buttons.LEFT_MINUS in buttons: prime.light_matrix.set_pixel(0, 4, brightness=100)
+        if remote.buttons.LEFT_MINUS not in buttons: prime.light_matrix.set_pixel(0, 4, brightness=0)
+
+        if remote.buttons.RIGHT_PLUS in buttons: prime.light_matrix.set_pixel(4, 0, brightness=100)
+        if remote.buttons.RIGHT_PLUS not in buttons: prime.light_matrix.set_pixel(4, 0, brightness=0)
+        if remote.buttons.RIGHT in buttons: prime.light_matrix.set_pixel(4, 2, brightness=100)
+        if remote.buttons.RIGHT not in buttons: prime.light_matrix.set_pixel(4, 2, brightness=0)
+        if remote.buttons.RIGHT_MINUS in buttons: prime.light_matrix.set_pixel(4, 4, brightness=100)
+        if remote.buttons.RIGHT_MINUS not in buttons: prime.light_matrix.set_pixel(4, 4, brightness=0)
         yield
 
 
