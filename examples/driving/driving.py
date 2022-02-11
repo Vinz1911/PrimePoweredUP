@@ -7,6 +7,10 @@ from util.print_override import spikeprint as print
 # create remote
 remote = Remote()
 
+# speed & steer
+SPEED = 75
+STEER = 45
+
 animation = [
     "03450:00060:09870:00000:00000",
     "00340:09050:08760:00000:00000",
@@ -18,6 +22,7 @@ animation = [
     "04560:03070:00980:00000:00000"
 ]
 
+
 async def on_start(vm, stack):
     frames = [hub.Image(frame) for frame in animation]
     vm.system.display.show(frames, clear=False, delay=round(1000 / 12), loop=True, fade=1)
@@ -26,19 +31,28 @@ async def on_start(vm, stack):
     pair = MotorPair('A', 'B')
     pair.set_stop_action('coast')
 
-    print("connecting...")
+    # connect remote
     await remote.connect()
-    print("connected")
-    prime.status_light.on('blue')
+
+    # set colors of remote and hub
+    print(remote.address())
+    prime.status_light.on('cyan')
+    remote.color(remote.colors.LIGHTGREEN)
 
     while True:
+        # read pressed buttons
         buttons = remote.pressed()
-        if buttons == (remote.button.RIGHT_PLUS,): pair.start(speed=65)
-        elif buttons == (remote.button.RIGHT_MINUS,): pair.start(speed=-65)
-        elif buttons == (remote.button.LEFT_MINUS, remote.button.RIGHT_PLUS): pair.start(speed=65, steering=-45)
-        elif buttons == (remote.button.LEFT_PLUS, remote.button.RIGHT_PLUS): pair.start(speed=65, steering=45)
-        elif buttons == (remote.button.LEFT_MINUS, remote.button.RIGHT_MINUS): pair.start(speed=-65, steering=-45)
-        elif buttons == (remote.button.LEFT_PLUS, remote.button.RIGHT_MINUS): pair.start(speed=-65, steering=45)
+
+        # stop vm if remote get disconnected
+        if buttons is None: vm.stop(); break
+
+        # move robot based on pressed buttons
+        if buttons == (remote.buttons.RIGHT_PLUS,): pair.start(speed=SPEED)
+        elif buttons == (remote.buttons.RIGHT_MINUS,): pair.start(speed=-SPEED)
+        elif buttons == (remote.buttons.LEFT_MINUS, remote.buttons.RIGHT_PLUS): pair.start(speed=SPEED, steering=-STEER)
+        elif buttons == (remote.buttons.LEFT_PLUS, remote.buttons.RIGHT_PLUS): pair.start(speed=SPEED, steering=STEER)
+        elif buttons == (remote.buttons.LEFT_MINUS, remote.buttons.RIGHT_MINUS): pair.start(speed=-SPEED, steering=-STEER)
+        elif buttons == (remote.buttons.LEFT_PLUS, remote.buttons.RIGHT_MINUS): pair.start(speed=-SPEED, steering=STEER)
         else: pair.stop()
         yield
 

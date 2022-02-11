@@ -19,6 +19,8 @@ of the Spike Prime / Robot Inventor. You can do this by using a script or with [
 
 ```bash
 # example using rshell
+/remote> connect serial /dev/cu.usbmodem3382397933381
+
 Connecting to /dev/cu.usbmodem3382397933381 (buffer-size 512)...
 Trying to connect to REPL  connected
 Retrieving sysname ... LEGO Technic Large Hub
@@ -47,6 +49,7 @@ async def on_start(vm, stack):
     
     while True:
         buttons = remote.pressed() # read pressed buttons
+        if buttons is None: vm.stop(); break # stop vm if remote get disconnected
         print(buttons) # Output is a tuple for example: (LEFT_PLUS, LEFT, LEFT_MINUS)
         yield
 
@@ -69,34 +72,32 @@ from spike.remote import Remote
 remote = Remote()
 remote.connect()
 
-# left buttons
-remote.button.LEFT_PLUS
-remote.button.LEFT
-remote.button.LEFT_MINUS
+# show buttons
+print(dir(remote.buttons))
 
-# right buttons
-remote.button.RIGHT_PLUS
-remote.button.RIGHT
-remote.button.RIGHT_MINUS
+# show colors
+print(dir(remote.colors))
 
-# center
-remote.button.CENTER
+# change remote's color
+remote.color(remote.colors.BLUE)
 
 # buttons are iterable
 # check for buttons
 
 while True:
     buttons = remote.pressed()
-    for remote.button.LEFT in buttons: print("Left pressed!")
+    for remote.buttons.LEFT in buttons: print("Left pressed!")
     
     # check tuple
-    if buttons == (remote.button.LEFT_PLUS, remote.button.RIGHT_PLUS): print("Left Plus and Right Plus pressed!")
+    if buttons == (remote.buttons.LEFT_PLUS, remote.buttons.RIGHT_PLUS): print("Left Plus and Right Plus pressed!")
 
 ```
 
 ### Known Issues:
+```
 - The library uses an async connection process, this is why we need the python vm for the usage. performance is also better.
 - The library uses internally ble notification service, sometimes the hub needs a restart to make this work (if tuple is empty on button press).
 - I didn't found a good way to disconnect the remote if you reach the end of a program (there is currently no way to run `cleanup` code on program's end). fallback solution is to use the `Start/Stop` button.
-So just for clarification: **remote needs to be reconnected on program start**. if your program is exited and the remote is still connected
+- Just for clarification: remote needs to be reconnected on program start. if your program is exited and the remote is still connected
 you need to unpair the remote by holding the green button until it's unpaired.
+```
