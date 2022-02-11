@@ -7,6 +7,8 @@ import struct
 class Remote:
     def __init__(self):
         self.button = _RemoteButton()
+        self.colors = _RemoteColor()
+        self.connected: bool = False
         self.__ble = ubluetooth.BLE()
         self.__ble.active(True)
         self.__ble.irq(self.__irq)
@@ -34,13 +36,14 @@ class Remote:
         if not self.__address: return None
         return ubinascii.hexlify(self.__address, ":").decode("UTF-8")
 
-    def color(self, red: int = 0xFF, green: int = 0xFF, blue: int = 0xFF):
-        color = _Decoder.bytes([0x0A, 0x00, 0x81, 0x34, 0x00, 0x51, 0x01, red, green, blue])
-        self.__write_bytes(color)
+    def color(self, color: int):
+        message = _Decoder.bytes([0x08, 0x00, 0x81, 0x34, 0x11, 0x51, 0x00, color])
+        self.__write_bytes(message)
 
-    def __handle_status(self, enabled: bool):
-        self.__ble_const.enabled = enabled
-        if enabled: self.color(0x00, 0x00, 0xFF)
+    def __handle_status(self):
+        message = _Decoder.bytes([0x08, 0x00, 0x81, 0x34, 0x11, 0x51, 0x00, 0x3])
+        self.__write_bytes(message, callback=lambda: enable())
+        def enable(): self.__ble_const.enabled = True; self.connected = True
 
     def __handle_enabled(self):
         return self.__ble_const.conn_handle is not None
@@ -84,6 +87,7 @@ class Remote:
     def __peripheral_disconnect(self, data):
         self.__pressed = tuple()
         self.__ble_const.conn_handle = None
+        self.connected = False
 
     def __gattc_service_result(self, data):
         conn_handle, start_handle, end_handle, uuid = data
@@ -95,16 +99,15 @@ class Remote:
             self.__ble_const.value_handle = value_handle
             left_port = _Decoder.bytes([0x0A, 0x00, 0x41, 0x00, 0x04, 0x01, 0x00, 0x00, 0x00, 0x01])
             right_port = _Decoder.bytes([0x0A, 0x00, 0x41, 0x01, 0x04, 0x01, 0x00, 0x00, 0x00, 0x01])
-            rgb_mode = _Decoder.bytes([0x0A, 0x00, 0x41, 0x34, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00])
             notifier = _Decoder.bytes([0x01, 0x00])
 
-            self.__write_bytes(rgb_mode, callback=lambda:
             self.__write_bytes(left_port, callback=lambda:
             self.__write_bytes(right_port, callback=lambda:
-            self.__write_bytes(notifier, 0x0C, callback=lambda: self.__handle_status(True)))))
+            self.__write_bytes(notifier, 0x0C, callback=lambda:
+            self.__handle_status())))
 
     def __gattc_write_done(self, data):
-            if self.__write_callback: self.__write_callback()
+        if self.__write_callback: self.__write_callback()
 
     def __gattc_notify(self, data):
         _, _, notify_data = data
@@ -130,6 +133,20 @@ class _RemoteButton:
     RIGHT = "RIGHT"
     RIGHT_MINUS = "RIGHT_MINUS"
     CENTER = "CENTER"
+
+
+class _RemoteColor:
+    OFF = const(0x00)
+    PINK = const(0x01)
+    PURPLE = const(0x02)
+    BLUE = const(0x03)
+    LIGHTBLUE = const(0x04)
+    LIGHTGREEN = const(0x05)
+    GREEN = const(0x06)
+    YELLOW = const(0x07)
+    ORANGE = const(0x08)
+    RED = const(0x09)
+    WHITE = const(0x0A)
 
 
 class _RemoteConstant:
