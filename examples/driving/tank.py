@@ -6,9 +6,8 @@ import hub
 # create remote
 remote = Remote()
 
-# Speed & steer settings
+# Speed setting
 SPEED = 75
-STEER = 45
 
 animation = [
     "03450:00060:09870:00000:00000",
